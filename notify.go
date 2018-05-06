@@ -30,6 +30,6 @@ func (as *AutoNATState) Connected(net inet.Network, c inet.Conn) {
 
 func (as *AutoNATState) Disconnected(net inet.Network, c inet.Conn) {
 	as.mx.Lock()
-	delete(as.peers, c.RemotePeer())
+	as.peers[c.RemotePeer()] = false
 	as.mx.Unlock()
 }
