@@ -10,7 +10,8 @@ message Message {
     OK               = 0;
     E_DIAL_ERROR     = 100;
     E_DIAL_REFUSED   = 101;
-    E_INTERNAL_ERROR = 200;
+    E_BAD_REQUEST    = 200;
+    E_INTERNAL_ERROR = 300;
   }
 
   message PeerInfo {

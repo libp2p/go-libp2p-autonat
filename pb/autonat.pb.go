@@ -61,20 +61,23 @@ const (
 	Message_OK               Message_ResponseStatus = 0
 	Message_E_DIAL_ERROR     Message_ResponseStatus = 100
 	Message_E_DIAL_REFUSED   Message_ResponseStatus = 101
-	Message_E_INTERNAL_ERROR Message_ResponseStatus = 200
+	Message_E_BAD_REQUEST    Message_ResponseStatus = 200
+	Message_E_INTERNAL_ERROR Message_ResponseStatus = 300
 )
 
 var Message_ResponseStatus_name = map[int32]string{
 	0:   "OK",
 	100: "E_DIAL_ERROR",
 	101: "E_DIAL_REFUSED",
-	200: "E_INTERNAL_ERROR",
+	200: "E_BAD_REQUEST",
+	300: "E_INTERNAL_ERROR",
 }
 var Message_ResponseStatus_value = map[string]int32{
 	"OK":               0,
 	"E_DIAL_ERROR":     100,
 	"E_DIAL_REFUSED":   101,
-	"E_INTERNAL_ERROR": 200,
+	"E_BAD_REQUEST":    200,
+	"E_INTERNAL_ERROR": 300,
 }
 
 func (x Message_ResponseStatus) Enum() *Message_ResponseStatus {
