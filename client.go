@@ -77,7 +77,16 @@ func (e AutoNATError) IsDialError() bool {
 	return e.Status == pb.Message_E_DIAL_ERROR
 }
 
+func (e AutoNATError) IsDialRefused() bool {
+	return e.Status == pb.Message_E_DIAL_REFUSED
+}
+
 func IsDialError(e error) bool {
 	ae, ok := e.(AutoNATError)
 	return ok && ae.IsDialError()
+}
+
+func IsDialRefused(e error) bool {
+	ae, ok := e.(AutoNATError)
+	return ok && ae.IsDialRefused()
 }
