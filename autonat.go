@@ -28,7 +28,7 @@ type AutoNAT interface {
 type AutoNATState struct {
 	ctx    context.Context
 	host   host.Host
-	peers  map[peer.ID]bool
+	peers  map[peer.ID]struct{}
 	status NATStatus
 	addr   ma.Multiaddr
 	mx     sync.Mutex
@@ -38,7 +38,7 @@ func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 	as := &AutoNATState{
 		ctx:    ctx,
 		host:   h,
-		peers:  make(map[peer.ID]bool),
+		peers:  make(map[peer.ID]struct{}),
 		status: NATStatusUnknown,
 	}
 
@@ -83,8 +83,8 @@ func (as *AutoNATState) autodetect() {
 
 	as.mx.Lock()
 	peers := make([]peer.ID, 0, len(as.peers))
-	for p, c := range as.peers {
-		if c {
+	for p := range as.peers {
+		if len(as.host.Network().ConnsToPeer(p)) > 0 {
 			peers = append(peers, p)
 		}
 	}

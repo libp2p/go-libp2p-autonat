@@ -23,17 +23,9 @@ func (as *AutoNATState) Connected(net inet.Network, c inet.Conn) {
 
 		log.Infof("Discovered AutoNAT peer %s", p.Pretty())
 		as.mx.Lock()
-		as.peers[p] = true
+		as.peers[p] = struct{}{}
 		as.mx.Unlock()
 	}(c.RemotePeer())
 }
 
-func (as *AutoNATState) Disconnected(net inet.Network, c inet.Conn) {
-	as.mx.Lock()
-	p := c.RemotePeer()
-	_, ok := as.peers[p]
-	if ok {
-		as.peers[p] = false
-	}
-	as.mx.Unlock()
-}
+func (as *AutoNATState) Disconnected(net inet.Network, c inet.Conn) {}
