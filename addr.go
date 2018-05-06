@@ -8,14 +8,22 @@ import (
 
 var private4, private6 []*net.IPNet
 var privateCIDR4 = []string{
+	// localhost
+	"127.0.0.0/8",
+	// private networks
 	"10.0.0.0/8",
+	"100.64.0.0/10",
 	"172.16.0.0/12",
 	"192.168.0.0/16",
-	"100.64.0.0/10",
+	// link local
 	"169.254.0.0/16",
 }
 var privateCIDR6 = []string{
+	// localhost
+	"::1/128",
+	// ULA reserved
 	"fc00::/7",
+	// link local
 	"fe80::/10",
 }
 
