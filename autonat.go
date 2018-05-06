@@ -12,9 +12,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-// attach to any host and auto-discovery autonat servers
-// periodically query them to deal with changing NAT situation
-
 type NATStatus int
 
 const (
