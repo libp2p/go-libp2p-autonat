@@ -111,7 +111,10 @@ func (as *AutoNATService) handleDial(p peer.ID, mpi *pb.Message_PeerInfo) *pb.Me
 			continue
 		}
 
-		// TODO we probably also want to skip all addresses that are not IANA public routable
+		// skip private network (unroutable) addresses
+		if !isPublicAddr(addr) {
+			continue
+		}
 
 		addrs = append(addrs, addr)
 	}
