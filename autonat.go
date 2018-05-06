@@ -42,7 +42,9 @@ func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 		status: NATStatusUnknown,
 	}
 
+	h.Network().Notify(as)
 	go as.background()
+
 	return as
 }
 
