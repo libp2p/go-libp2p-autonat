@@ -145,10 +145,8 @@ func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 		log.Debugf("error dialing %s: %s", pi.ID.Pretty(), err.Error())
 		// wait for the context to timeout to avoid leaking timing information
 		// this renders the service ineffective as a port scanner
-		select {
-		case <-ctx.Done():
-			return newDialResponseError(pb.Message_E_DIAL_ERROR, "dial failed")
-		}
+		<-ctx.Done()
+		return newDialResponseError(pb.Message_E_DIAL_ERROR, "dial failed")
 	}
 
 	conns := as.dialer.Network().ConnsToPeer(pi.ID)
