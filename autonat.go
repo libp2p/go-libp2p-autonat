@@ -15,7 +15,7 @@ import (
 type NATStatus int
 
 const (
-	NATStatusUnknown = iota
+	NATStatusUnknown NATStatus = iota
 	NATStatusPublic
 	NATStatusPrivate
 )
