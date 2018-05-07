@@ -66,7 +66,7 @@ func (as *AutoNATState) PublicAddr() (ma.Multiaddr, error) {
 func (as *AutoNATState) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
-	time.Sleep(10 * time.Second)
+	time.Sleep(15 * time.Second)
 	for {
 		as.autodetect()
 		select {
