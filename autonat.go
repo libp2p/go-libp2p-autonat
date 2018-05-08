@@ -20,6 +20,11 @@ const (
 	NATStatusPrivate
 )
 
+var (
+	AutoNATBootDelay       = 15 * time.Second
+	AutoNATRefreshInterval = 15 * time.Minute
+)
+
 type AutoNAT interface {
 	Status() NATStatus
 	PublicAddr() (ma.Multiaddr, error)
@@ -66,11 +71,11 @@ func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
-	time.Sleep(15 * time.Second)
+	time.Sleep(AutoNATBootDelay)
 	for {
 		as.autodetect()
 		select {
-		case <-time.After(15 * time.Minute):
+		case <-time.After(AutoNATRefreshInterval):
 		case <-as.ctx.Done():
 			return
 		}
