@@ -6,14 +6,14 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-var _ inet.Notifiee = (*AutoNATState)(nil)
+var _ inet.Notifiee = (*AmbientAutoNAT)(nil)
 
-func (as *AutoNATState) Listen(net inet.Network, a ma.Multiaddr)      {}
-func (as *AutoNATState) ListenClose(net inet.Network, a ma.Multiaddr) {}
-func (as *AutoNATState) OpenedStream(net inet.Network, s inet.Stream) {}
-func (as *AutoNATState) ClosedStream(net inet.Network, s inet.Stream) {}
+func (as *AmbientAutoNAT) Listen(net inet.Network, a ma.Multiaddr)      {}
+func (as *AmbientAutoNAT) ListenClose(net inet.Network, a ma.Multiaddr) {}
+func (as *AmbientAutoNAT) OpenedStream(net inet.Network, s inet.Stream) {}
+func (as *AmbientAutoNAT) ClosedStream(net inet.Network, s inet.Stream) {}
 
-func (as *AutoNATState) Connected(net inet.Network, c inet.Conn) {
+func (as *AmbientAutoNAT) Connected(net inet.Network, c inet.Conn) {
 	go func(p peer.ID) {
 		s, err := as.host.NewStream(as.ctx, p, AutoNATProto)
 		if err != nil {
@@ -28,4 +28,4 @@ func (as *AutoNATState) Connected(net inet.Network, c inet.Conn) {
 	}(c.RemotePeer())
 }
 
-func (as *AutoNATState) Disconnected(net inet.Network, c inet.Conn) {}
+func (as *AmbientAutoNAT) Disconnected(net inet.Network, c inet.Conn) {}

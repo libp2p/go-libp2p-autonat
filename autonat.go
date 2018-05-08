@@ -25,7 +25,7 @@ type AutoNAT interface {
 	PublicAddr() (ma.Multiaddr, error)
 }
 
-type AutoNATState struct {
+type AmbientAutoNAT struct {
 	ctx    context.Context
 	host   host.Host
 	peers  map[peer.ID]struct{}
@@ -35,7 +35,7 @@ type AutoNATState struct {
 }
 
 func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
-	as := &AutoNATState{
+	as := &AmbientAutoNAT{
 		ctx:    ctx,
 		host:   h,
 		peers:  make(map[peer.ID]struct{}),
@@ -48,11 +48,11 @@ func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 	return as
 }
 
-func (as *AutoNATState) Status() NATStatus {
+func (as *AmbientAutoNAT) Status() NATStatus {
 	return as.status
 }
 
-func (as *AutoNATState) PublicAddr() (ma.Multiaddr, error) {
+func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 	as.mx.Lock()
 	defer as.mx.Unlock()
 
@@ -63,7 +63,7 @@ func (as *AutoNATState) PublicAddr() (ma.Multiaddr, error) {
 	return as.addr, nil
 }
 
-func (as *AutoNATState) background() {
+func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
 	time.Sleep(15 * time.Second)
@@ -77,7 +77,7 @@ func (as *AutoNATState) background() {
 	}
 }
 
-func (as *AutoNATState) autodetect() {
+func (as *AmbientAutoNAT) autodetect() {
 	if len(as.peers) == 0 {
 		log.Debugf("skipping NAT auto detection; no autonat peers")
 		return
