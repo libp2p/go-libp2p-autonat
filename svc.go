@@ -59,13 +59,14 @@ func (as *AutoNATService) handleStream(s inet.Stream) {
 
 	err := r.ReadMsg(&req)
 	if err != nil {
+		log.Debugf("Error reading message from %s: %s", pid.Pretty(), err.Error())
 		s.Reset()
 		return
 	}
 
 	t := req.GetType()
 	if t != pb.Message_DIAL {
-		log.Debugf("Unexpected message from: %s", t.String())
+		log.Debugf("Unexpected message from %s: %s (%d)", pid.Pretty(), t.String(), t)
 		s.Reset()
 		return
 	}
@@ -76,7 +77,7 @@ func (as *AutoNATService) handleStream(s inet.Stream) {
 
 	err = w.WriteMsg(&res)
 	if err != nil {
-		log.Debugf("Error writing response: %s", err.Error())
+		log.Debugf("Error writing response to %s: %s", pid.Pretty(), err.Error())
 		s.Reset()
 		return
 	}
