@@ -23,6 +23,8 @@ const (
 var (
 	AutoNATBootDelay       = 15 * time.Second
 	AutoNATRefreshInterval = 15 * time.Minute
+
+	AutoNATRequestTimeout = 60 * time.Second
 )
 
 type AutoNAT interface {
@@ -109,7 +111,7 @@ func (as *AmbientAutoNAT) autodetect() {
 
 	for _, p := range peers {
 		cli := NewAutoNATClient(as.host, p)
-		ctx, cancel := context.WithTimeout(as.ctx, 60*time.Second)
+		ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
 		a, err := cli.Dial(ctx)
 		cancel()
 

@@ -18,6 +18,8 @@ import (
 
 const P_CIRCUIT = 290
 
+var AutoNATServiceResetInterval = 1 * time.Minute
+
 type AutoNATService struct {
 	ctx    context.Context
 	dialer host.Host
@@ -161,7 +163,7 @@ func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 }
 
 func (as *AutoNATService) resetPeers() {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(AutoNATServiceResetInterval)
 	defer ticker.Stop()
 
 	for {
