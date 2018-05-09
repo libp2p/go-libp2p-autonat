@@ -85,29 +85,12 @@ func (as *AmbientAutoNAT) background() {
 }
 
 func (as *AmbientAutoNAT) autodetect() {
-	if len(as.peers) == 0 {
+	peers := as.getPeers()
+
+	if len(peers) == 0 {
 		log.Debugf("skipping NAT auto detection; no autonat peers")
 		return
 	}
-
-	as.mx.Lock()
-	peers := make([]peer.ID, 0, len(as.peers))
-	for p := range as.peers {
-		if len(as.host.Network().ConnsToPeer(p)) > 0 {
-			peers = append(peers, p)
-		}
-	}
-
-	if len(peers) == 0 {
-		// we don't have any open connections, try any autonat peer that we know about
-		for p := range as.peers {
-			peers = append(peers, p)
-		}
-	}
-
-	as.mx.Unlock()
-
-	shufflePeers(peers)
 
 	for _, p := range peers {
 		cli := NewAutoNATClient(as.host, p)
@@ -139,6 +122,33 @@ func (as *AmbientAutoNAT) autodetect() {
 	as.mx.Lock()
 	as.status = NATStatusUnknown
 	as.mx.Unlock()
+}
+
+func (as *AmbientAutoNAT) getPeers() []peer.ID {
+	as.mx.Lock()
+	defer as.mx.Unlock()
+
+	if len(as.peers) == 0 {
+		return nil
+	}
+
+	peers := make([]peer.ID, 0, len(as.peers))
+	for p := range as.peers {
+		if len(as.host.Network().ConnsToPeer(p)) > 0 {
+			peers = append(peers, p)
+		}
+	}
+
+	if len(peers) == 0 {
+		// we don't have any open connections, try any autonat peer that we know about
+		for p := range as.peers {
+			peers = append(peers, p)
+		}
+	}
+
+	shufflePeers(peers)
+
+	return peers
 }
 
 func shufflePeers(peers []peer.ID) {
