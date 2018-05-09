@@ -15,7 +15,7 @@ import (
 )
 
 type AutoNATClient interface {
-	Dial(ctx context.Context) (ma.Multiaddr, error)
+	Dial(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
 }
 
 type AutoNATError struct {
@@ -23,17 +23,16 @@ type AutoNATError struct {
 	Text   string
 }
 
-func NewAutoNATClient(h host.Host, p peer.ID) AutoNATClient {
-	return &client{h: h, p: p}
+func NewAutoNATClient(h host.Host) AutoNATClient {
+	return &client{h: h}
 }
 
 type client struct {
 	h host.Host
-	p peer.ID
 }
 
-func (c *client) Dial(ctx context.Context) (ma.Multiaddr, error) {
-	s, err := c.h.NewStream(ctx, c.p, AutoNATProto)
+func (c *client) Dial(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
+	s, err := c.h.NewStream(ctx, p, AutoNATProto)
 	if err != nil {
 		return nil, err
 	}

@@ -92,10 +92,11 @@ func (as *AmbientAutoNAT) autodetect() {
 		return
 	}
 
+	cli := NewAutoNATClient(as.host)
+
 	for _, p := range peers {
-		cli := NewAutoNATClient(as.host, p)
 		ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
-		a, err := cli.Dial(ctx)
+		a, err := cli.Dial(ctx, p)
 		cancel()
 
 		switch {
