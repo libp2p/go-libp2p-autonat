@@ -14,15 +14,19 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+// AutoNATClient is a stateless client interface to AutoNAT peers
 type AutoNATClient interface {
+	// Dial requests from a peer providing AutoNAT services to test dial back
 	Dial(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
 }
 
+// AutoNATError is the class of errors signalled by AutoNAT services
 type AutoNATError struct {
 	Status pb.Message_ResponseStatus
 	Text   string
 }
 
+// NewAutoNATClient creates a fresh instance of an AutoNATClient
 func NewAutoNATClient(h host.Host) AutoNATClient {
 	return &client{h: h}
 }
@@ -80,11 +84,13 @@ func (e AutoNATError) IsDialRefused() bool {
 	return e.Status == pb.Message_E_DIAL_REFUSED
 }
 
+// IsDialError returns true if the AutoNAT peer signalled an error dialing back
 func IsDialError(e error) bool {
 	ae, ok := e.(AutoNATError)
 	return ok && ae.IsDialError()
 }
 
+// IsDialRefused returns true if the AutoNAT peer signalled refusal to dial back
 func IsDialRefused(e error) bool {
 	ae, ok := e.(AutoNATError)
 	return ok && ae.IsDialRefused()

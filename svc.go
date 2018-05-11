@@ -20,13 +20,16 @@ const P_CIRCUIT = 290
 
 var AutoNATServiceResetInterval = 1 * time.Minute
 
+// AutoNATService provides NAT autodetection services to other peers
 type AutoNATService struct {
 	ctx    context.Context
 	dialer host.Host
-	peers  map[peer.ID]struct{}
-	mx     sync.Mutex
+
+	mx    sync.Mutex
+	peers map[peer.ID]struct{}
 }
 
+// NewAutoNATService creates a new AutoNATService instance attached to a host
 func NewAutoNATService(ctx context.Context, h host.Host) (*AutoNATService, error) {
 	dialer, err := libp2p.New(ctx)
 	if err != nil {

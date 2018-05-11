@@ -15,8 +15,11 @@ import (
 type NATStatus int
 
 const (
+	// NAT status is unknown
 	NATStatusUnknown NATStatus = iota
+	// NAT status is publicly dialable
 	NATStatusPublic
+	// NAT status is private network
 	NATStatusPrivate
 )
 
@@ -27,11 +30,16 @@ var (
 	AutoNATRequestTimeout = 60 * time.Second
 )
 
+// AutoNAT is the interface for ambient NAT autodiscovery
 type AutoNAT interface {
+	// Status returns the current NAT status
 	Status() NATStatus
+	// PublicAddr returns the public dial address when NAT status is public and an
+	// error otherwise
 	PublicAddr() (ma.Multiaddr, error)
 }
 
+// AmbientAutoNAT is the implementation of ambient NAT autodiscovery
 type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
@@ -42,6 +50,7 @@ type AmbientAutoNAT struct {
 	addr   ma.Multiaddr
 }
 
+// NewAutoNAT creates a new ambient NAT auto-discovery instance
 func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 	as := &AmbientAutoNAT{
 		ctx:    ctx,
