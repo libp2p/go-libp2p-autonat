@@ -33,12 +33,13 @@ type AutoNAT interface {
 }
 
 type AmbientAutoNAT struct {
-	ctx    context.Context
-	host   host.Host
+	ctx  context.Context
+	host host.Host
+
+	mx     sync.Mutex
 	peers  map[peer.ID]struct{}
 	status NATStatus
 	addr   ma.Multiaddr
-	mx     sync.Mutex
 }
 
 func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
