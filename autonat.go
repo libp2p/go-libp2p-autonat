@@ -12,10 +12,13 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
+// NATStatus is the state of NAT as detected by the ambient service.
 type NATStatus int
 
 const (
-	// NAT status is unknown
+	// NAT status is unknown; this means that the ambient serice has not been
+	// able to decide the presence of NAT in the most recent attempt to test
+	// dial through known autonat peers.  initial state.
 	NATStatusUnknown NATStatus = iota
 	// NAT status is publicly dialable
 	NATStatusPublic
