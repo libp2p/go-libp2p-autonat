@@ -50,7 +50,7 @@ type AmbientAutoNAT struct {
 	addr   ma.Multiaddr
 }
 
-// NewAutoNAT creates a new ambient NAT auto-discovery instance
+// NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
 func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 	as := &AmbientAutoNAT{
 		ctx:    ctx,
