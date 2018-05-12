@@ -16,7 +16,7 @@ import (
 type NATStatus int
 
 const (
-	// NAT status is unknown; this means that the ambient serice has not been
+	// NAT status is unknown; this means that the ambient service has not been
 	// able to decide the presence of NAT in the most recent attempt to test
 	// dial through known autonat peers.  initial state.
 	NATStatusUnknown NATStatus = iota
