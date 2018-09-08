@@ -31,7 +31,7 @@ type AutoNATService struct {
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
 func NewAutoNATService(ctx context.Context, h host.Host) (*AutoNATService, error) {
-	dialer, err := libp2p.New(ctx)
+	dialer, err := libp2p.New(ctx, libp2p.NoListenAddrs)
 	if err != nil {
 		return nil, err
 	}
