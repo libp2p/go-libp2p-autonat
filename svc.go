@@ -18,7 +18,10 @@ import (
 
 const P_CIRCUIT = 290
 
-var AutoNATServiceResetInterval = 1 * time.Minute
+var (
+	AutoNATServiceDialTimeout   = 42 * time.Second
+	AutoNATServiceResetInterval = 1 * time.Minute
+)
 
 // AutoNATService provides NAT autodetection services to other peers
 type AutoNATService struct {
@@ -144,7 +147,7 @@ func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 	as.peers[pi.ID] = struct{}{}
 	as.mx.Unlock()
 
-	ctx, cancel := context.WithTimeout(as.ctx, 42*time.Second)
+	ctx, cancel := context.WithTimeout(as.ctx, AutoNATServiceDialTimeout)
 	defer cancel()
 
 	err := as.dialer.Connect(ctx, pi)
