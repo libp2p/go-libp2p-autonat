@@ -1,8 +1,9 @@
 package autonat
 
 import (
+	"time"
+
 	inet "github.com/libp2p/go-libp2p-net"
-	peer "github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -14,18 +15,25 @@ func (as *AmbientAutoNAT) OpenedStream(net inet.Network, s inet.Stream) {}
 func (as *AmbientAutoNAT) ClosedStream(net inet.Network, s inet.Stream) {}
 
 func (as *AmbientAutoNAT) Connected(net inet.Network, c inet.Conn) {
-	go func(p peer.ID) {
-		s, err := as.host.NewStream(as.ctx, p, AutoNATProto)
+	p := c.RemotePeer()
+
+	go func() {
+		// add some delay for identify
+		time.Sleep(250 * time.Millisecond)
+
+		protos, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto)
 		if err != nil {
+			log.Debugf("error retrieving supported protocols for peer %s: %s", p, err)
 			return
 		}
-		s.Close()
 
-		log.Infof("Discovered AutoNAT peer %s", p.Pretty())
-		as.mx.Lock()
-		as.peers[p] = struct{}{}
-		as.mx.Unlock()
-	}(c.RemotePeer())
+		if len(protos) > 0 {
+			log.Infof("Discovered AutoNAT peer %s", p.Pretty())
+			as.mx.Lock()
+			as.peers[p] = struct{}{}
+			as.mx.Unlock()
+		}
+	}()
 }
 
 func (as *AmbientAutoNAT) Disconnected(net inet.Network, c inet.Conn) {}
