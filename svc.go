@@ -166,7 +166,7 @@ func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 	}
 
 	ra := conns[0].RemoteMultiaddr()
-	conns[0].Close()
+	as.dialer.Network().ClosePeer(pi.ID)
 	return newDialResponseOK(ra)
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	host "github.com/libp2p/go-libp2p-host"
+	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -29,8 +30,7 @@ const (
 var (
 	AutoNATBootDelay       = 15 * time.Second
 	AutoNATRefreshInterval = 15 * time.Minute
-
-	AutoNATRequestTimeout = 60 * time.Second
+	AutoNATRequestTimeout  = 60 * time.Second
 )
 
 // AutoNAT is the interface for ambient NAT autodiscovery
@@ -86,7 +86,12 @@ func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
-	time.Sleep(AutoNATBootDelay)
+	select {
+	case <-time.After(AutoNATBootDelay):
+	case <-as.ctx.Done():
+		return
+	}
+
 	for {
 		as.autodetect()
 		select {
@@ -109,7 +114,7 @@ func (as *AmbientAutoNAT) autodetect() {
 
 	for _, p := range peers {
 		ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
-		a, err := cli.Dial(ctx, p)
+		a, err := cli.DialBack(ctx, p)
 		cancel()
 
 		switch {
@@ -148,7 +153,7 @@ func (as *AmbientAutoNAT) getPeers() []peer.ID {
 
 	peers := make([]peer.ID, 0, len(as.peers))
 	for p := range as.peers {
-		if len(as.host.Network().ConnsToPeer(p)) > 0 {
+		if as.host.Network().Connectedness(p) == inet.Connected {
 			peers = append(peers, p)
 		}
 	}

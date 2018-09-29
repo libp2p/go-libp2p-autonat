@@ -55,7 +55,7 @@ func TestAutoNATServiceDialError(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, hs, hc)
 
-	_, err := ac.Dial(ctx, hs.ID())
+	_, err := ac.DialBack(ctx, hs.ID())
 	if err == nil {
 		t.Fatal("Dial back succeeded unexpectedly!")
 	}
@@ -78,7 +78,7 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, hs, hc)
 
-	_, err := ac.Dial(ctx, hs.ID())
+	_, err := ac.DialBack(ctx, hs.ID())
 	if err != nil {
 		t.Fatalf("Dial back failed: %s", err.Error())
 	}
@@ -101,12 +101,12 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, hs, hc)
 
-	_, err := ac.Dial(ctx, hs.ID())
+	_, err := ac.DialBack(ctx, hs.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = ac.Dial(ctx, hs.ID())
+	_, err = ac.DialBack(ctx, hs.ID())
 	if err == nil {
 		t.Fatal("Dial back succeeded unexpectedly!")
 	}
@@ -117,7 +117,7 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	_, err = ac.Dial(ctx, hs.ID())
+	_, err = ac.DialBack(ctx, hs.ID())
 	if err != nil {
 		t.Fatal(err)
 	}

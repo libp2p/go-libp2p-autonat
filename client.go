@@ -16,8 +16,9 @@ import (
 
 // AutoNATClient is a stateless client interface to AutoNAT peers
 type AutoNATClient interface {
-	// Dial requests from a peer providing AutoNAT services to test dial back
-	Dial(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
+	// DialBack requests from a peer providing AutoNAT services to test dial back
+	// and report the address on a successful connection.
+	DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
 }
 
 // AutoNATError is the class of errors signalled by AutoNAT services
@@ -35,7 +36,7 @@ type client struct {
 	h host.Host
 }
 
-func (c *client) Dial(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
+func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
 	s, err := c.h.NewStream(ctx, p, AutoNATProto)
 	if err != nil {
 		return nil, err
