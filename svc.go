@@ -78,7 +78,7 @@ func (as *AutoNATService) handleStream(s inet.Stream) {
 		return
 	}
 
-	dr := as.handleDial(pid, req.GetDial().GetPeer())
+	dr := as.handleDial(pid, s.Conn().RemoteMultiaddr(), req.GetDial().GetPeer())
 	res.Type = pb.Message_DIAL_RESPONSE.Enum()
 	res.DialResponse = dr
 
@@ -90,7 +90,7 @@ func (as *AutoNATService) handleStream(s inet.Stream) {
 	}
 }
 
-func (as *AutoNATService) handleDial(p peer.ID, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
+func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
 	if mpi == nil {
 		return newDialResponseError(pb.Message_E_BAD_REQUEST, "missing peer info")
 	}
@@ -108,6 +108,14 @@ func (as *AutoNATService) handleDial(p peer.ID, mpi *pb.Message_PeerInfo) *pb.Me
 	}
 
 	addrs := make([]ma.Multiaddr, 0)
+	seen := make(map[string]struct{})
+
+	// add observed addr to the list of addresses to dial
+	if !as.skipDial(obsaddr) {
+		addrs = append(addrs, obsaddr)
+		seen[obsaddr.String()] = struct{}{}
+	}
+
 	for _, maddr := range mpi.GetAddrs() {
 		addr, err := ma.NewMultiaddrBytes(maddr)
 		if err != nil {
@@ -115,18 +123,18 @@ func (as *AutoNATService) handleDial(p peer.ID, mpi *pb.Message_PeerInfo) *pb.Me
 			continue
 		}
 
-		// skip relay addresses
-		_, err = addr.ValueForProtocol(P_CIRCUIT)
-		if err == nil {
+		if as.skipDial(addr) {
 			continue
 		}
 
-		// skip private network (unroutable) addresses
-		if !isPublicAddr(addr) {
+		str := addr.String()
+		_, ok := seen[str]
+		if ok {
 			continue
 		}
 
 		addrs = append(addrs, addr)
+		seen[str] = struct{}{}
 	}
 
 	if len(addrs) == 0 {
@@ -134,6 +142,21 @@ func (as *AutoNATService) handleDial(p peer.ID, mpi *pb.Message_PeerInfo) *pb.Me
 	}
 
 	return as.doDial(pstore.PeerInfo{ID: p, Addrs: addrs})
+}
+
+func (as *AutoNATService) skipDial(addr ma.Multiaddr) bool {
+	// skip relay addresses
+	_, err := addr.ValueForProtocol(P_CIRCUIT)
+	if err == nil {
+		return true
+	}
+
+	// skip private network (unroutable) addresses
+	if !isPublicAddr(addr) {
+		return true
+	}
+
+	return false
 }
 
 func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
