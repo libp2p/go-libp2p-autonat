@@ -8,7 +8,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-const AutoNATProto = "/autonat/1.0.0"
+const AutoNATProto = "/libp2p/autonat/1.0.0"
 
 var log = logging.Logger("autonat")
 
