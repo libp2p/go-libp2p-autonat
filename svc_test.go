@@ -12,7 +12,7 @@ import (
 )
 
 func makeAutoNATService(ctx context.Context, t *testing.T) (host.Host, *AutoNATService) {
-	h, err := libp2p.New(ctx)
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func makeAutoNATService(ctx context.Context, t *testing.T) (host.Host, *AutoNATS
 }
 
 func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, AutoNATClient) {
-	h, err := libp2p.New(ctx)
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	if err != nil {
 		t.Fatal(err)
 	}
