@@ -94,7 +94,9 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceDialTimeout = 1 * time.Second
 	save2 := AutoNATServiceResetInterval
 	AutoNATServiceResetInterval = 1 * time.Second
-	save3 := private4
+	save3 := AutoNATServiceThrottle
+	AutoNATServiceThrottle = 1
+	save4 := private4
 	private4 = []*net.IPNet{}
 
 	hs, _ := makeAutoNATService(ctx, t)
@@ -124,5 +126,6 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 
 	AutoNATServiceDialTimeout = save1
 	AutoNATServiceResetInterval = save2
-	private4 = save3
+	AutoNATServiceThrottle = save3
+	private4 = save4
 }
