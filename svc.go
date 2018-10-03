@@ -31,8 +31,8 @@ type AutoNATService struct {
 	dialer host.Host
 
 	// rate limiter
-	mx    sync.Mutex
-	peers map[peer.ID]int
+	mx   sync.Mutex
+	reqs map[peer.ID]int
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
@@ -46,11 +46,11 @@ func NewAutoNATService(ctx context.Context, h host.Host, opts ...libp2p.Option) 
 	as := &AutoNATService{
 		ctx:    ctx,
 		dialer: dialer,
-		peers:  make(map[peer.ID]int),
+		reqs:   make(map[peer.ID]int),
 	}
 	h.SetStreamHandler(AutoNATProto, as.handleStream)
 
-	go as.resetPeers()
+	go as.resetRateLimiter()
 
 	return as, nil
 }
@@ -165,12 +165,12 @@ func (as *AutoNATService) skipDial(addr ma.Multiaddr) bool {
 func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 	// rate limit check
 	as.mx.Lock()
-	count := as.peers[pi.ID]
+	count := as.reqs[pi.ID]
 	if count >= AutoNATServiceThrottle {
 		as.mx.Unlock()
 		return newDialResponseError(pb.Message_E_DIAL_REFUSED, "too many dials")
 	}
-	as.peers[pi.ID] = count + 1
+	as.reqs[pi.ID] = count + 1
 	as.mx.Unlock()
 
 	ctx, cancel := context.WithTimeout(as.ctx, AutoNATServiceDialTimeout)
@@ -196,7 +196,7 @@ func (as *AutoNATService) doDial(pi pstore.PeerInfo) *pb.Message_DialResponse {
 	return newDialResponseOK(ra)
 }
 
-func (as *AutoNATService) resetPeers() {
+func (as *AutoNATService) resetRateLimiter() {
 	ticker := time.NewTicker(AutoNATServiceResetInterval)
 	defer ticker.Stop()
 
@@ -204,7 +204,7 @@ func (as *AutoNATService) resetPeers() {
 		select {
 		case <-ticker.C:
 			as.mx.Lock()
-			as.peers = make(map[peer.ID]int)
+			as.reqs = make(map[peer.ID]int)
 			as.mx.Unlock()
 
 		case <-as.ctx.Done():
