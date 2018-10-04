@@ -29,7 +29,7 @@ const (
 
 var (
 	AutoNATBootDelay       = 15 * time.Second
-	AutoNATRetryInterval   = 60 * time.Second
+	AutoNATRetryInterval   = 90 * time.Second
 	AutoNATRefreshInterval = 15 * time.Minute
 	AutoNATRequestTimeout  = 60 * time.Second
 )
@@ -174,23 +174,24 @@ func (as *AmbientAutoNAT) getPeers() []peer.ID {
 		return nil
 	}
 
-	peers := make([]peer.ID, 0, len(as.peers))
+	var connected, others []peer.ID
+
 	for p := range as.peers {
 		if as.host.Network().Connectedness(p) == inet.Connected {
-			peers = append(peers, p)
+			connected = append(connected, p)
+		} else {
+			others = append(others, p)
 		}
 	}
 
-	if len(peers) == 0 {
-		// we don't have any open connections, try any autonat peer that we know about
-		for p := range as.peers {
-			peers = append(peers, p)
-		}
+	shufflePeers(connected)
+
+	if len(connected) < 3 {
+		shufflePeers(others)
+		return append(connected, others...)
+	} else {
+		return connected
 	}
-
-	shufflePeers(peers)
-
-	return peers
 }
 
 func shufflePeers(peers []peer.ID) {
