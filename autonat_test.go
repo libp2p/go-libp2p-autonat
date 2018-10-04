@@ -30,6 +30,8 @@ func TestAutoNATPrivate(t *testing.T) {
 	AutoNATBootDelay = 1 * time.Second
 	save2 := AutoNATRefreshInterval
 	AutoNATRefreshInterval = 1 * time.Second
+	save3 := AutoNATRetryInterval
+	AutoNATRetryInterval = 1 * time.Second
 
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, an := makeAutoNAT(ctx, t)
@@ -49,6 +51,7 @@ func TestAutoNATPrivate(t *testing.T) {
 
 	AutoNATBootDelay = save1
 	AutoNATRefreshInterval = save2
+	AutoNATRetryInterval = save3
 }
 
 func TestAutoNATPublic(t *testing.T) {
@@ -59,7 +62,9 @@ func TestAutoNATPublic(t *testing.T) {
 	AutoNATBootDelay = 1 * time.Second
 	save2 := AutoNATRefreshInterval
 	AutoNATRefreshInterval = 1 * time.Second
-	save3 := private4
+	save3 := AutoNATRetryInterval
+	AutoNATRetryInterval = 1 * time.Second
+	save4 := private4
 	private4 = []*net.IPNet{}
 
 	hs, _ := makeAutoNATService(ctx, t)
@@ -80,5 +85,6 @@ func TestAutoNATPublic(t *testing.T) {
 
 	AutoNATBootDelay = save1
 	AutoNATRefreshInterval = save2
-	private4 = save3
+	AutoNATRetryInterval = save3
+	private4 = save4
 }
