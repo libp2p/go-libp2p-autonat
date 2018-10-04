@@ -29,6 +29,7 @@ const (
 
 var (
 	AutoNATBootDelay       = 15 * time.Second
+	AutoNATRetryInterval   = 60 * time.Second
 	AutoNATRefreshInterval = 15 * time.Minute
 	AutoNATRequestTimeout  = 60 * time.Second
 )
@@ -47,10 +48,11 @@ type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
 
-	mx     sync.Mutex
-	peers  map[peer.ID]struct{}
-	status NATStatus
-	addr   ma.Multiaddr
+	mx         sync.Mutex
+	peers      map[peer.ID]struct{}
+	status     NATStatus
+	addr       ma.Multiaddr
+	confidence int
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
@@ -94,8 +96,14 @@ func (as *AmbientAutoNAT) background() {
 
 	for {
 		as.autodetect()
+
+		delay := AutoNATRefreshInterval
+		if as.status == NATStatusUnknown {
+			delay = AutoNATRetryInterval
+		}
+
 		select {
-		case <-time.After(AutoNATRefreshInterval):
+		case <-time.After(delay):
 		case <-as.ctx.Done():
 			return
 		}
@@ -111,6 +119,7 @@ func (as *AmbientAutoNAT) autodetect() {
 	}
 
 	cli := NewAutoNATClient(as.host)
+	failures := 0
 
 	for _, p := range peers {
 		ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
@@ -123,15 +132,21 @@ func (as *AmbientAutoNAT) autodetect() {
 			as.mx.Lock()
 			as.addr = a
 			as.status = NATStatusPublic
+			as.confidence = 0
 			as.mx.Unlock()
 			return
 
 		case IsDialError(err):
-			log.Debugf("NAT status is private; dial error through %s: %s", p.Pretty(), err.Error())
-			as.mx.Lock()
-			as.status = NATStatusPrivate
-			as.mx.Unlock()
-			return
+			log.Debugf("dial error through %s: %s", p.Pretty(), err.Error())
+			failures++
+			if failures >= 3 || as.confidence >= 3 { // 3 times is enemy action
+				log.Debugf("NAT status is private")
+				as.mx.Lock()
+				as.status = NATStatusPrivate
+				as.confidence = 3
+				as.mx.Unlock()
+				return
+			}
 
 		default:
 			log.Debugf("Error dialing through %s: %s", p.Pretty(), err.Error())
@@ -139,7 +154,15 @@ func (as *AmbientAutoNAT) autodetect() {
 	}
 
 	as.mx.Lock()
-	as.status = NATStatusUnknown
+	if failures > 0 {
+		as.status = NATStatusPrivate
+		as.confidence++
+		log.Debugf("NAT status is private")
+	} else {
+		as.status = NATStatusUnknown
+		as.confidence = 0
+		log.Debugf("NAT status is unknown")
+	}
 	as.mx.Unlock()
 }
 
