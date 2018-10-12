@@ -19,7 +19,7 @@ func (as *AmbientAutoNAT) Connected(net inet.Network, c inet.Conn) {
 
 	go func() {
 		// add some delay for identify
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 
 		protos, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto)
 		if err != nil {
