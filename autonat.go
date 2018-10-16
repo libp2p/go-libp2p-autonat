@@ -48,10 +48,15 @@ type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
 
-	mx         sync.Mutex
-	peers      map[peer.ID]struct{}
-	status     NATStatus
-	addr       ma.Multiaddr
+	mx     sync.Mutex
+	peers  map[peer.ID]struct{}
+	status NATStatus
+	addr   ma.Multiaddr
+	// Reflects the confidence on of the NATStatus being private, as a single
+	// dialback may fail for reasons unrelated to NAT.
+	// If it is <3, then multiple autoNAT peers may be contacted for dialback
+	// If only a single autoNAT peer is known, then the confidence increases
+	// for each failure until it reaches 3.
 	confidence int
 }
 
