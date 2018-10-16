@@ -44,6 +44,7 @@ func parsePrivateCIDR(cidrs []string) []*net.IPNet {
 	return ipnets
 }
 
+// IsPublicAddr retruns true if the IP part of the multiaddr is not in a private network
 func IsPublicAddr(a ma.Multiaddr) bool {
 	ip, err := a.ValueForProtocol(ma.P_IP4)
 	if err == nil {
