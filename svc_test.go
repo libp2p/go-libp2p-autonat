@@ -10,6 +10,7 @@ import (
 	autonat "github.com/libp2p/go-libp2p-autonat"
 	host "github.com/libp2p/go-libp2p-host"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
+	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 func makeAutoNATService(ctx context.Context, t *testing.T) (host.Host, *AutoNATService) {
@@ -72,8 +73,8 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save := autonat.Private4
-	autonat.Private4 = []*net.IPNet{}
+	save := manet.Private4
+	manet.Private4 = []*net.IPNet{}
 
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, ac := makeAutoNATClient(ctx, t)
@@ -84,7 +85,7 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 		t.Fatalf("Dial back failed: %s", err.Error())
 	}
 
-	autonat.Private4 = save
+	manet.Private4 = save
 }
 
 func TestAutoNATServiceDialRateLimiter(t *testing.T) {
@@ -97,8 +98,8 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceResetInterval = 1 * time.Second
 	save3 := AutoNATServiceThrottle
 	AutoNATServiceThrottle = 1
-	save4 := autonat.Private4
-	autonat.Private4 = []*net.IPNet{}
+	save4 := manet.Private4
+	manet.Private4 = []*net.IPNet{}
 
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, ac := makeAutoNATClient(ctx, t)
@@ -128,5 +129,5 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceDialTimeout = save1
 	AutoNATServiceResetInterval = save2
 	AutoNATServiceThrottle = save3
-	autonat.Private4 = save4
+	manet.Private4 = save4
 }

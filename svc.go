@@ -15,6 +15,7 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 const P_CIRCUIT = 290
@@ -156,7 +157,7 @@ func (as *AutoNATService) skipDial(addr ma.Multiaddr) bool {
 	}
 
 	// skip private network (unroutable) addresses
-	if !autonat.IsPublicAddr(addr) {
+	if !manet.IsPublicAddr(addr) {
 		return true
 	}
 
