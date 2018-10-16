@@ -10,6 +10,13 @@ import (
 	host "github.com/libp2p/go-libp2p-host"
 )
 
+func init() {
+	AutoNATBootDelay = 1 * time.Second
+	AutoNATRefreshInterval = 1 * time.Second
+	AutoNATRetryInterval = 1 * time.Second
+	AutoNATIdentifyDelay = 100 * time.Millisecond
+}
+
 func makeAutoNAT(ctx context.Context, t *testing.T) (host.Host, AutoNAT) {
 	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	if err != nil {
@@ -26,13 +33,6 @@ func TestAutoNATPrivate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save1 := AutoNATBootDelay
-	AutoNATBootDelay = 1 * time.Second
-	save2 := AutoNATRefreshInterval
-	AutoNATRefreshInterval = 1 * time.Second
-	save3 := AutoNATRetryInterval
-	AutoNATRetryInterval = 1 * time.Second
-
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, an := makeAutoNAT(ctx, t)
 
@@ -48,23 +48,13 @@ func TestAutoNATPrivate(t *testing.T) {
 	if status != NATStatusPrivate {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
-
-	AutoNATBootDelay = save1
-	AutoNATRefreshInterval = save2
-	AutoNATRetryInterval = save3
 }
 
 func TestAutoNATPublic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save1 := AutoNATBootDelay
-	AutoNATBootDelay = 1 * time.Second
-	save2 := AutoNATRefreshInterval
-	AutoNATRefreshInterval = 1 * time.Second
-	save3 := AutoNATRetryInterval
-	AutoNATRetryInterval = 1 * time.Second
-	save4 := private4
+	save := private4
 	private4 = []*net.IPNet{}
 
 	hs, _ := makeAutoNATService(ctx, t)
@@ -83,8 +73,5 @@ func TestAutoNATPublic(t *testing.T) {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
 
-	AutoNATBootDelay = save1
-	AutoNATRefreshInterval = save2
-	AutoNATRetryInterval = save3
-	private4 = save4
+	private4 = save
 }

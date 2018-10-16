@@ -9,6 +9,8 @@ import (
 
 var _ inet.Notifiee = (*AmbientAutoNAT)(nil)
 
+var AutoNATIdentifyDelay = 5 * time.Second
+
 func (as *AmbientAutoNAT) Listen(net inet.Network, a ma.Multiaddr)      {}
 func (as *AmbientAutoNAT) ListenClose(net inet.Network, a ma.Multiaddr) {}
 func (as *AmbientAutoNAT) OpenedStream(net inet.Network, s inet.Stream) {}
@@ -19,7 +21,7 @@ func (as *AmbientAutoNAT) Connected(net inet.Network, c inet.Conn) {
 
 	go func() {
 		// add some delay for identify
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(AutoNATIdentifyDelay)
 
 		protos, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto)
 		if err != nil {
