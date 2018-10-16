@@ -5,7 +5,6 @@ import (
 
 	logging "github.com/ipfs/go-log"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
-	ma "github.com/multiformats/go-multiaddr"
 )
 
 const AutoNATProto = "/libp2p/autonat/1.0.0"
@@ -24,18 +23,4 @@ func newDialMessage(pi pstore.PeerInfo) *pb.Message {
 	}
 
 	return msg
-}
-
-func newDialResponseOK(addr ma.Multiaddr) *pb.Message_DialResponse {
-	dr := new(pb.Message_DialResponse)
-	dr.Status = pb.Message_OK.Enum()
-	dr.Addr = addr.Bytes()
-	return dr
-}
-
-func newDialResponseError(status pb.Message_ResponseStatus, text string) *pb.Message_DialResponse {
-	dr := new(pb.Message_DialResponse)
-	dr.Status = status.Enum()
-	dr.StatusText = &text
-	return dr
 }

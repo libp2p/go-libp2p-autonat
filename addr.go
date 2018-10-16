@@ -6,7 +6,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-var private4, private6 []*net.IPNet
+var Private4, Private6 []*net.IPNet
 var privateCIDR4 = []string{
 	// localhost
 	"127.0.0.0/8",
@@ -28,8 +28,8 @@ var privateCIDR6 = []string{
 }
 
 func init() {
-	private4 = parsePrivateCIDR(privateCIDR4)
-	private6 = parsePrivateCIDR(privateCIDR6)
+	Private4 = parsePrivateCIDR(privateCIDR4)
+	Private6 = parsePrivateCIDR(privateCIDR6)
 }
 
 func parsePrivateCIDR(cidrs []string) []*net.IPNet {
@@ -44,15 +44,15 @@ func parsePrivateCIDR(cidrs []string) []*net.IPNet {
 	return ipnets
 }
 
-func isPublicAddr(a ma.Multiaddr) bool {
+func IsPublicAddr(a ma.Multiaddr) bool {
 	ip, err := a.ValueForProtocol(ma.P_IP4)
 	if err == nil {
-		return !inAddrRange(ip, private4)
+		return !inAddrRange(ip, Private4)
 	}
 
 	ip, err = a.ValueForProtocol(ma.P_IP6)
 	if err == nil {
-		return !inAddrRange(ip, private6)
+		return !inAddrRange(ip, Private6)
 	}
 
 	return false
