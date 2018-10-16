@@ -12,7 +12,7 @@ It allows peers to figure out their NAT dialability situation by using test dial
 
 ## Documenation
 
-See https://godoc.org/github.com/libp2p/go-libp2p-discovery.
+See https://godoc.org/github.com/libp2p/go-libp2p-autonat
 
 ## Contribute
 
