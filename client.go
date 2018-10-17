@@ -27,13 +27,21 @@ type AutoNATError struct {
 	Text   string
 }
 
+// GetAddrs is a function that returns the addresses to dial back
+type GetAddrs func() []ma.Multiaddr
+
 // NewAutoNATClient creates a fresh instance of an AutoNATClient
-func NewAutoNATClient(h host.Host) AutoNATClient {
-	return &client{h: h}
+func NewAutoNATClient(h host.Host, ga ...GetAddrs) AutoNATClient {
+	getAddrs := h.Addrs
+	if len(ga) > 0 {
+		getAddrs = ga[0]
+	}
+	return &client{h: h, getAddrs: getAddrs}
 }
 
 type client struct {
-	h host.Host
+	h        host.Host
+	getAddrs GetAddrs
 }
 
 func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
@@ -46,7 +54,7 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	r := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
 	w := ggio.NewDelimitedWriter(s)
 
-	req := newDialMessage(pstore.PeerInfo{ID: c.h.ID(), Addrs: c.h.Addrs()})
+	req := newDialMessage(pstore.PeerInfo{ID: c.h.ID(), Addrs: c.getAddrs()})
 	err = w.WriteMsg(req)
 	if err != nil {
 		return nil, err
