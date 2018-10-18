@@ -63,10 +63,10 @@ type AmbientAutoNAT struct {
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
-func NewAutoNAT(ctx context.Context, h host.Host, ga ...GetAddrs) AutoNAT {
-	getAddrs := h.Addrs
-	if len(ga) > 0 {
-		getAddrs = ga[0]
+// If getAddrs is nil, h.Addrs will be used
+func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
+	if getAddrs == nil {
+		getAddrs = h.Addrs
 	}
 
 	as := &AmbientAutoNAT{

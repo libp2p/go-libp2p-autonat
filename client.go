@@ -31,10 +31,10 @@ type AutoNATError struct {
 type GetAddrs func() []ma.Multiaddr
 
 // NewAutoNATClient creates a fresh instance of an AutoNATClient
-func NewAutoNATClient(h host.Host, ga ...GetAddrs) AutoNATClient {
-	getAddrs := h.Addrs
-	if len(ga) > 0 {
-		getAddrs = ga[0]
+// If getAddrs is nil, h.Addrs will be used
+func NewAutoNATClient(h host.Host, getAddrs GetAddrs) AutoNATClient {
+	if getAddrs == nil {
+		getAddrs = h.Addrs
 	}
 	return &client{h: h, getAddrs: getAddrs}
 }
