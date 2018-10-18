@@ -1,4 +1,4 @@
-# go-libp2p-discovery
+# go-libp2p-autonat-svc
 
 [![](https://img.shields.io/badge/made%20by-Protocol%20Labs-blue.svg?style=flat-square)](http://ipn.io)
 [![](https://img.shields.io/badge/project-libp2p-blue.svg?style=flat-square)](http://libp2p.io/)
@@ -9,7 +9,7 @@
 
 This package provides an implementation of the AutoNATService; see [autonat](https://github.com/libp2p/go-libp2p-autonat).
 
-## Documenation
+## Documentation
 
 See https://godoc.org/github.com/libp2p/go-libp2p-autonat-svc.
 
