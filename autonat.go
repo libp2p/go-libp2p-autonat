@@ -48,6 +48,8 @@ type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
 
+	getAddrs GetAddrs
+
 	mx     sync.Mutex
 	peers  map[peer.ID]struct{}
 	status NATStatus
@@ -61,12 +63,18 @@ type AmbientAutoNAT struct {
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
-func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
+// If getAddrs is nil, h.Addrs will be used
+func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
+	if getAddrs == nil {
+		getAddrs = h.Addrs
+	}
+
 	as := &AmbientAutoNAT{
-		ctx:    ctx,
-		host:   h,
-		peers:  make(map[peer.ID]struct{}),
-		status: NATStatusUnknown,
+		ctx:      ctx,
+		host:     h,
+		getAddrs: getAddrs,
+		peers:    make(map[peer.ID]struct{}),
+		status:   NATStatusUnknown,
 	}
 
 	h.Network().Notify(as)
@@ -123,7 +131,7 @@ func (as *AmbientAutoNAT) autodetect() {
 		return
 	}
 
-	cli := NewAutoNATClient(as.host)
+	cli := NewAutoNATClient(as.host, as.getAddrs)
 	failures := 0
 
 	for _, p := range peers {
