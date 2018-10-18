@@ -10,6 +10,12 @@
       "hash": "QmPL3AKtiaQyYpchZceXBZhZ3MSnoGqJvLZrc7fzDTTQdJ",
       "name": "go-libp2p",
       "version": "6.0.19"
+    },
+    {
+      "author": "vyzo",
+      "hash": "QmNtEW59XTrreF9U4NAjYUmixEJ56HnfiJCj1p97bFnah2",
+      "name": "go-libp2p-autonat",
+      "version": "1.0.0"
     }
   ],
   "gxVersion": "0.12.1",
@@ -19,3 +25,4 @@
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
   "version": "1.0.0"
 }
+
