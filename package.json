@@ -7,15 +7,15 @@
   "gxDependencies": [
     {
       "author": "whyrusleeping",
-      "hash": "QmPL3AKtiaQyYpchZceXBZhZ3MSnoGqJvLZrc7fzDTTQdJ",
+      "hash": "QmUDTcnDp2WssbmiDLC6aYurUeyt7QeRakHUQMxA2mZ5iB",
       "name": "go-libp2p",
-      "version": "6.0.19"
+      "version": "6.0.23"
     },
     {
       "author": "vyzo",
-      "hash": "QmNtEW59XTrreF9U4NAjYUmixEJ56HnfiJCj1p97bFnah2",
+      "hash": "QmUn8mtaf4tTFwKnFRzkNYYLc8XEo3yz6qBfp5ShVB1HYZ",
       "name": "go-libp2p-autonat",
-      "version": "1.0.0"
+      "version": "1.0.1"
     }
   ],
   "gxVersion": "0.12.1",
