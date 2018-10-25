@@ -33,7 +33,7 @@ func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, autonat.Au
 		t.Fatal(err)
 	}
 
-	cli := autonat.NewAutoNATClient(h)
+	cli := autonat.NewAutoNATClient(h, nil)
 	return h, cli
 }
 
