@@ -10,6 +10,7 @@ import (
 	host "github.com/libp2p/go-libp2p-host"
 	inet "github.com/libp2p/go-libp2p-net"
 	peer "github.com/libp2p/go-libp2p-peer"
+	pstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -51,7 +52,7 @@ type AmbientAutoNAT struct {
 	getAddrs GetAddrs
 
 	mx     sync.Mutex
-	peers  map[peer.ID]struct{}
+	peers  map[peer.ID][]ma.Multiaddr
 	status NATStatus
 	addr   ma.Multiaddr
 	// Reflects the confidence on of the NATStatus being private, as a single
@@ -73,7 +74,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		ctx:      ctx,
 		host:     h,
 		getAddrs: getAddrs,
-		peers:    make(map[peer.ID]struct{}),
+		peers:    make(map[peer.ID][]ma.Multiaddr),
 		status:   NATStatusUnknown,
 	}
 
@@ -134,14 +135,15 @@ func (as *AmbientAutoNAT) autodetect() {
 	cli := NewAutoNATClient(as.host, as.getAddrs)
 	failures := 0
 
-	for _, p := range peers {
+	for _, pi := range peers {
 		ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
-		a, err := cli.DialBack(ctx, p)
+		as.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, pstore.TempAddrTTL)
+		a, err := cli.DialBack(ctx, pi.ID)
 		cancel()
 
 		switch {
 		case err == nil:
-			log.Debugf("NAT status is public; address through %s: %s", p.Pretty(), a.String())
+			log.Debugf("NAT status is public; address through %s: %s", pi.ID.Pretty(), a.String())
 			as.mx.Lock()
 			as.addr = a
 			as.status = NATStatusPublic
@@ -150,7 +152,7 @@ func (as *AmbientAutoNAT) autodetect() {
 			return
 
 		case IsDialError(err):
-			log.Debugf("dial error through %s: %s", p.Pretty(), err.Error())
+			log.Debugf("dial error through %s: %s", pi.ID.Pretty(), err.Error())
 			failures++
 			if failures >= 3 || as.confidence >= 3 { // 3 times is enemy action
 				log.Debugf("NAT status is private")
@@ -162,7 +164,7 @@ func (as *AmbientAutoNAT) autodetect() {
 			}
 
 		default:
-			log.Debugf("Error dialing through %s: %s", p.Pretty(), err.Error())
+			log.Debugf("Error dialing through %s: %s", pi.ID.Pretty(), err.Error())
 		}
 	}
 
@@ -179,7 +181,7 @@ func (as *AmbientAutoNAT) autodetect() {
 	as.mx.Unlock()
 }
 
-func (as *AmbientAutoNAT) getPeers() []peer.ID {
+func (as *AmbientAutoNAT) getPeers() []pstore.PeerInfo {
 	as.mx.Lock()
 	defer as.mx.Unlock()
 
@@ -187,13 +189,13 @@ func (as *AmbientAutoNAT) getPeers() []peer.ID {
 		return nil
 	}
 
-	var connected, others []peer.ID
+	var connected, others []pstore.PeerInfo
 
-	for p := range as.peers {
+	for p, addrs := range as.peers {
 		if as.host.Network().Connectedness(p) == inet.Connected {
-			connected = append(connected, p)
+			connected = append(connected, pstore.PeerInfo{ID: p, Addrs: addrs})
 		} else {
-			others = append(others, p)
+			others = append(others, pstore.PeerInfo{ID: p, Addrs: addrs})
 		}
 	}
 
@@ -207,7 +209,7 @@ func (as *AmbientAutoNAT) getPeers() []peer.ID {
 	}
 }
 
-func shufflePeers(peers []peer.ID) {
+func shufflePeers(peers []pstore.PeerInfo) {
 	for i := range peers {
 		j := rand.Intn(i + 1)
 		peers[i], peers[j] = peers[j], peers[i]

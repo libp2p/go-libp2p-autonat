@@ -32,7 +32,7 @@ func (as *AmbientAutoNAT) Connected(net inet.Network, c inet.Conn) {
 		if len(protos) > 0 {
 			log.Infof("Discovered AutoNAT peer %s", p.Pretty())
 			as.mx.Lock()
-			as.peers[p] = struct{}{}
+			as.peers[p] = as.host.Peerstore().Addrs(p)
 			as.mx.Unlock()
 		}
 	}()
