@@ -7,9 +7,9 @@
   "gxDependencies": [
     {
       "author": "whyrusleeping",
-      "hash": "QmcNGX5RaxPPCYwa6yGXM1EcUbrreTTinixLcYGmMwf1sx",
+      "hash": "QmcZUhA1xQo8meuYBFLcTHqQb2ogpDCTZUTfTrko7PUeHs",
       "name": "go-libp2p",
-      "version": "6.0.35"
+      "version": "6.0.36"
     }
   ],
   "gxVersion": "0.12.1",
@@ -17,6 +17,6 @@
   "license": "",
   "name": "go-libp2p-autonat-svc",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "1.0.10"
+  "version": "1.0.11"
 }
 
