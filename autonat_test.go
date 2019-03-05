@@ -73,8 +73,9 @@ func newDialResponseError(status pb.Message_ResponseStatus, text string) *pb.Mes
 func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, AutoNAT) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	a := NewAutoNAT(ctx, h, nil)
+	a.(*AmbientAutoNAT).mx.Lock()
 	a.(*AmbientAutoNAT).peers[ash.ID()] = ash.Addrs()
-
+	a.(*AmbientAutoNAT).mx.Unlock()
 	return h, a
 }
 
