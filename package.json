@@ -64,6 +64,5 @@
   "license": "",
   "name": "go-libp2p-autonat",
   "releaseCmd": "git commit -a -m \"gx publish $VERSION\"",
-  "version": "1.0.12"
+  "version": "1.0.13"
 }
-
