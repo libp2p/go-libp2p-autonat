@@ -21,7 +21,7 @@ import (
 const P_CIRCUIT = 290
 
 var (
-	AutoNATServiceDialTimeout   = 42 * time.Second
+	AutoNATServiceDialTimeout   = 15 * time.Second
 	AutoNATServiceResetInterval = 1 * time.Minute
 
 	AutoNATServiceThrottle = 3
