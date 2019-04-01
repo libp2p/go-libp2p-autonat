@@ -186,18 +186,22 @@ func (as *AmbientAutoNAT) autodetect() {
 	as.mx.Lock()
 	if public > 0 {
 		log.Debugf("NAT status is public")
+		if as.status == NATStatusPrivate {
+			as.confidence = 0
+		} else if as.confidence < 3 {
+			as.confidence++
+		}
 		as.status = NATStatusPublic
 		as.addr = pubaddr
-		if as.confidence < 3 {
-			as.confidence++
-		}
 	} else if private > 0 {
 		log.Debugf("NAT status is private")
-		as.status = NATStatusPrivate
-		as.addr = nil
-		if as.confidence < 3 {
+		if as.status == NATStatusPublic {
+			as.confidence = 0
+		} else if as.confidence < 3 {
 			as.confidence++
 		}
+		as.status = NATStatusPrivate
+		as.addr = nil
 	} else {
 		log.Debugf("NAT status is unknown")
 		as.status = NATStatusUnknown
