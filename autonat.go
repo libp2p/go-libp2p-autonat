@@ -189,6 +189,7 @@ func (as *AmbientAutoNAT) autodetect() {
 	if result.public > 0 {
 		log.Debugf("NAT status is public")
 		if as.status == NATStatusPrivate {
+			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
 		} else if as.confidence < 3 {
 			as.confidence++
@@ -198,6 +199,7 @@ func (as *AmbientAutoNAT) autodetect() {
 	} else if result.private > 0 {
 		log.Debugf("NAT status is private")
 		if as.status == NATStatusPublic {
+			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
 		} else if as.confidence < 3 {
 			as.confidence++
