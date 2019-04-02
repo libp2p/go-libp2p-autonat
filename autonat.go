@@ -206,11 +206,13 @@ func (as *AmbientAutoNAT) autodetect() {
 		}
 		as.status = NATStatusPrivate
 		as.addr = nil
+	} else if as.confidence > 0 {
+		// don't just flip to unknown, reduce confidence first
+		as.confidence--
 	} else {
 		log.Debugf("NAT status is unknown")
 		as.status = NATStatusUnknown
 		as.addr = nil
-		as.confidence = 0
 	}
 	as.mx.Unlock()
 }
