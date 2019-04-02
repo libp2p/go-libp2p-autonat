@@ -138,10 +138,12 @@ func (as *AmbientAutoNAT) autodetect() {
 	ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
 	defer cancel()
 
-	var mx sync.Mutex
-	var pubaddr ma.Multiaddr
-	private := 0
-	public := 0
+	var result struct {
+		sync.Mutex
+		private int
+		public  int
+		pubaddr ma.Multiaddr
+	}
 
 	probe := 3 - as.confidence
 	if probe == 0 {
@@ -162,16 +164,16 @@ func (as *AmbientAutoNAT) autodetect() {
 			switch {
 			case err == nil:
 				log.Debugf("Dialback through %s successful; public address is %s", pi.ID.Pretty(), a.String())
-				mx.Lock()
-				public++
-				pubaddr = a
-				mx.Unlock()
+				result.Lock()
+				result.public++
+				result.pubaddr = a
+				result.Unlock()
 
 			case IsDialError(err):
 				log.Debugf("Dialback through %s failed", pi.ID.Pretty())
-				mx.Lock()
-				private++
-				mx.Unlock()
+				result.Lock()
+				result.private++
+				result.Unlock()
 
 			default:
 				log.Debugf("Dialback error through %s: %s", pi.ID.Pretty(), err)
@@ -184,7 +186,7 @@ func (as *AmbientAutoNAT) autodetect() {
 	wg.Wait()
 
 	as.mx.Lock()
-	if public > 0 {
+	if result.public > 0 {
 		log.Debugf("NAT status is public")
 		if as.status == NATStatusPrivate {
 			as.confidence = 0
@@ -192,8 +194,8 @@ func (as *AmbientAutoNAT) autodetect() {
 			as.confidence++
 		}
 		as.status = NATStatusPublic
-		as.addr = pubaddr
-	} else if private > 0 {
+		as.addr = result.pubaddr
+	} else if result.private > 0 {
 		log.Debugf("NAT status is private")
 		if as.status == NATStatusPublic {
 			as.confidence = 0
