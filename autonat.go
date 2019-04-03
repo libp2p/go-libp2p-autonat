@@ -158,6 +158,8 @@ func (as *AmbientAutoNAT) autodetect() {
 	for _, pi := range peers[:probe] {
 		wg.Add(1)
 		go func(pi pstore.PeerInfo) {
+			defer wg.Done()
+
 			as.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, pstore.TempAddrTTL)
 			a, err := cli.DialBack(ctx, pi.ID)
 
@@ -178,8 +180,6 @@ func (as *AmbientAutoNAT) autodetect() {
 			default:
 				log.Debugf("Dialback error through %s: %s", pi.ID.Pretty(), err)
 			}
-
-			wg.Done()
 		}(pi)
 	}
 
