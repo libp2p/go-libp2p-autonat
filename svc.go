@@ -58,7 +58,7 @@ func NewAutoNATService(ctx context.Context, h host.Host, opts ...libp2p.Option) 
 }
 
 func (as *AutoNATService) handleStream(s inet.Stream) {
-	defer s.Close()
+	defer inet.FullClose(s)
 
 	pid := s.Conn().RemotePeer()
 	log.Debugf("New stream from %s", pid.Pretty())
