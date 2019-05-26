@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	libp2p "github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+
 	autonat "github.com/libp2p/go-libp2p-autonat"
-	host "github.com/libp2p/go-libp2p-host"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
@@ -38,14 +39,14 @@ func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, autonat.Au
 }
 
 func connect(t *testing.T, a, b host.Host) {
-	pinfo := pstore.PeerInfo{ID: a.ID(), Addrs: a.Addrs()}
+	pinfo := peer.AddrInfo{ID: a.ID(), Addrs: a.Addrs()}
 	err := b.Connect(context.Background(), pinfo)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Note: these tests assume that the host has only private inet addresses!
+// Note: these tests assume that the host has only private network addresses!
 func TestAutoNATServiceDialError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
