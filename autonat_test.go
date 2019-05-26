@@ -6,12 +6,13 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
+	"github.com/libp2p/go-libp2p-core/peer"
+
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 
 	ggio "github.com/gogo/protobuf/io"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
-	host "github.com/libp2p/go-libp2p-host"
-	inet "github.com/libp2p/go-libp2p-net"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 	ma "github.com/multiformats/go-multiaddr"
 )
@@ -36,7 +37,7 @@ func makeAutoNATServicePublic(ctx context.Context, t *testing.T) host.Host {
 	return h
 }
 
-func sayAutoNATPrivate(s inet.Stream) {
+func sayAutoNATPrivate(s network.Stream) {
 	defer s.Close()
 	w := ggio.NewDelimitedWriter(s)
 	res := pb.Message{
@@ -46,7 +47,7 @@ func sayAutoNATPrivate(s inet.Stream) {
 	w.WriteMsg(&res)
 }
 
-func sayAutoNATPublic(s inet.Stream) {
+func sayAutoNATPublic(s network.Stream) {
 	defer s.Close()
 	w := ggio.NewDelimitedWriter(s)
 	res := pb.Message{
@@ -80,7 +81,7 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 }
 
 func connect(t *testing.T, a, b host.Host) {
-	pinfo := pstore.PeerInfo{ID: a.ID(), Addrs: a.Addrs()}
+	pinfo := peer.AddrInfo{ID: a.ID(), Addrs: a.Addrs()}
 	err := b.Connect(context.Background(), pinfo)
 	if err != nil {
 		t.Fatal(err)
