@@ -61,11 +61,13 @@ type AmbientAutoNAT struct {
 	// If only a single autoNAT peer is known, then the confidence increases
 	// for each failure until it reaches 3.
 	confidence int
+
+	callback func(NATStatus, int)
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
 // If getAddrs is nil, h.Addrs will be used
-func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
+func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs, cb func(NATStatus, int)) AutoNAT {
 	if getAddrs == nil {
 		getAddrs = h.Addrs
 	}
@@ -76,6 +78,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs: getAddrs,
 		peers:    make(map[peer.ID][]ma.Multiaddr),
 		status:   NATStatusUnknown,
+		callback: cb,
 	}
 
 	h.Network().Notify(as)
@@ -213,6 +216,9 @@ func (as *AmbientAutoNAT) autodetect() {
 		log.Debugf("NAT status is unknown")
 		as.status = NATStatusUnknown
 		as.addr = nil
+	}
+	if as.callback != nil {
+		as.callback(as.status, as.confidence)
 	}
 	as.mx.Unlock()
 }
