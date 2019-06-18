@@ -62,17 +62,13 @@ type AmbientAutoNAT struct {
 	// for each failure until it reaches 3.
 	confidence int
 
-	callback func(NATStatus, int)
+	callbacks []func(NATStatus, int)
+	cbLk      sync.Mutex
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
 // If getAddrs is nil, h.Addrs will be used
 func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
-	return NewAutoNATCB(ctx, h, getAddrs, nil)
-}
-
-// NewAutoNATCB creates a new autonat with a callback for state changes
-func NewAutoNATCB(ctx context.Context, h host.Host, getAddrs GetAddrs, cb func(NATStatus, int)) AutoNAT {
 	if getAddrs == nil {
 		getAddrs = h.Addrs
 	}
@@ -83,7 +79,6 @@ func NewAutoNATCB(ctx context.Context, h host.Host, getAddrs GetAddrs, cb func(N
 		getAddrs: getAddrs,
 		peers:    make(map[peer.ID][]ma.Multiaddr),
 		status:   NATStatusUnknown,
-		callback: cb,
 	}
 
 	h.Network().Notify(as)
@@ -222,10 +217,22 @@ func (as *AmbientAutoNAT) autodetect() {
 		as.status = NATStatusUnknown
 		as.addr = nil
 	}
-	if as.callback != nil {
-		as.callback(as.status, as.confidence)
-	}
+	as.runCallbacks()
 	as.mx.Unlock()
+}
+
+func (as *AmbientAutoNAT) runCallbacks() {
+	as.cbLk.Lock()
+	defer as.cbLk.Unlock()
+	for _, cb := range as.callbacks {
+		cb(as.status, as.confidence)
+	}
+}
+
+func (as *AmbientAutoNAT) AddCallback(cb func(NATStatus, int)) {
+	as.cbLk.Lock()
+	defer as.cbLk.Unlock()
+	as.callbacks = append(as.callbacks, cb)
 }
 
 func (as *AmbientAutoNAT) getPeers() []peer.AddrInfo {
