@@ -67,7 +67,12 @@ type AmbientAutoNAT struct {
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
 // If getAddrs is nil, h.Addrs will be used
-func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs, cb func(NATStatus, int)) AutoNAT {
+func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
+	return NewAutoNATCB(ctx, h, getAddrs, nil)
+}
+
+// NewAutoNATCB creates a new autonat with a callback for state changes
+func NewAutoNATCB(ctx context.Context, h host.Host, getAddrs GetAddrs, cb func(NATStatus, int)) AutoNAT {
 	if getAddrs == nil {
 		getAddrs = h.Addrs
 	}
