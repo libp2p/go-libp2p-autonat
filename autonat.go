@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -61,6 +62,10 @@ type AmbientAutoNAT struct {
 	// If only a single autoNAT peer is known, then the confidence increases
 	// for each failure until it reaches 3.
 	confidence int
+
+	emitUnknown event.Emitter
+	emitPublic  event.Emitter
+	emitPrivate event.Emitter
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
@@ -70,12 +75,20 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs = h.Addrs
 	}
 
+	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown))
+	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic))
+	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate))
+
 	as := &AmbientAutoNAT{
 		ctx:      ctx,
 		host:     h,
 		getAddrs: getAddrs,
 		peers:    make(map[peer.ID][]ma.Multiaddr),
 		status:   NATStatusUnknown,
+
+		emitUnknown: emitUnknown,
+		emitPublic:  emitPublic,
+		emitPrivate: emitPrivate,
 	}
 
 	h.Network().Notify(as)
@@ -88,6 +101,18 @@ func (as *AmbientAutoNAT) Status() NATStatus {
 	as.mx.Lock()
 	defer as.mx.Unlock()
 	return as.status
+}
+
+func (as *AmbientAutoNAT) updateStatus(s NATStatus) {
+	as.status = s
+	switch s {
+	case NATStatusUnknown:
+		as.emitUnknown.Emit(event.EvtLocalRoutabilityUnknown{})
+	case NATStatusPublic:
+		as.emitPublic.Emit(event.EvtLocalRoutabilityPublic{})
+	case NATStatusPrivate:
+		as.emitPrivate.Emit(event.EvtLocalRoutabilityPrivate{})
+	}
 }
 
 func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
@@ -194,7 +219,7 @@ func (as *AmbientAutoNAT) autodetect() {
 		} else if as.confidence < 3 {
 			as.confidence++
 		}
-		as.status = NATStatusPublic
+		as.updateStatus(NATStatusPublic)
 		as.addr = result.pubaddr
 	} else if result.private > 0 {
 		log.Debugf("NAT status is private")
@@ -204,14 +229,14 @@ func (as *AmbientAutoNAT) autodetect() {
 		} else if as.confidence < 3 {
 			as.confidence++
 		}
-		as.status = NATStatusPrivate
+		as.updateStatus(NATStatusPrivate)
 		as.addr = nil
 	} else if as.confidence > 0 {
 		// don't just flip to unknown, reduce confidence first
 		as.confidence--
 	} else {
 		log.Debugf("NAT status is unknown")
-		as.status = NATStatusUnknown
+		as.updateStatus(NATStatusUnknown)
 		as.addr = nil
 	}
 	as.mx.Unlock()
