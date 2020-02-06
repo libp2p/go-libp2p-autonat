@@ -6,10 +6,10 @@ import (
 	"time"
 
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
-	"github.com/libp2p/go-libp2p-core/peer"
-
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 
 	ggio "github.com/gogo/protobuf/io"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
@@ -96,6 +96,12 @@ func TestAutoNATPrivate(t *testing.T) {
 	hs := makeAutoNATServicePrivate(ctx, t)
 	hc, an := makeAutoNAT(ctx, t, hs)
 
+	// subscribe to AutoNat events
+	s, err := hc.EventBus().Subscribe(&event.EvtLocalRoutabilityPrivate{})
+	if err != nil {
+		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPrivate, err=%s", err)
+	}
+
 	status := an.Status()
 	if status != NATStatusUnknown {
 		t.Fatalf("unexpected NAT status: %d", status)
@@ -108,6 +114,17 @@ func TestAutoNATPrivate(t *testing.T) {
 	if status != NATStatusPrivate {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
+
+	select {
+	case e := <-s.Out():
+		_, ok := e.(event.EvtLocalRoutabilityPrivate)
+		if !ok {
+			t.Fatal("got wrong event type from the bus")
+		}
+
+	case <-time.After(1 * time.Second):
+		t.Fatal("failed to get the EvtLocalRoutabilityPrivate event from the bus")
+	}
 }
 
 func TestAutoNATPublic(t *testing.T) {
@@ -116,6 +133,12 @@ func TestAutoNATPublic(t *testing.T) {
 
 	hs := makeAutoNATServicePublic(ctx, t)
 	hc, an := makeAutoNAT(ctx, t, hs)
+
+	// subscribe to AutoNat events
+	s, err := hc.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
+	if err != nil {
+		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
+	}
 
 	status := an.Status()
 	if status != NATStatusUnknown {
@@ -128,5 +151,16 @@ func TestAutoNATPublic(t *testing.T) {
 	status = an.Status()
 	if status != NATStatusPublic {
 		t.Fatalf("unexpected NAT status: %d", status)
+	}
+
+	select {
+	case e := <-s.Out():
+		_, ok := e.(event.EvtLocalRoutabilityPublic)
+		if !ok {
+			t.Fatal("got wrong event type from the bus")
+		}
+
+	case <-time.After(1 * time.Second):
+		t.Fatal("failed to get the EvtLocalRoutabilityPublic event from the bus")
 	}
 }
