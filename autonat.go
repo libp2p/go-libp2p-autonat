@@ -219,8 +219,8 @@ func (as *AmbientAutoNAT) autodetect() {
 		} else if as.confidence < 3 {
 			as.confidence++
 		}
-		as.updateStatus(NATStatusPublic)
 		as.addr = result.pubaddr
+		as.updateStatus(NATStatusPublic)
 	} else if result.private > 0 {
 		log.Debugf("NAT status is private")
 		if as.status == NATStatusPublic {
@@ -229,15 +229,15 @@ func (as *AmbientAutoNAT) autodetect() {
 		} else if as.confidence < 3 {
 			as.confidence++
 		}
-		as.updateStatus(NATStatusPrivate)
 		as.addr = nil
+		as.updateStatus(NATStatusPrivate)
 	} else if as.confidence > 0 {
 		// don't just flip to unknown, reduce confidence first
 		as.confidence--
 	} else {
 		log.Debugf("NAT status is unknown")
-		as.updateStatus(NATStatusUnknown)
 		as.addr = nil
+		as.updateStatus(NATStatusUnknown)
 	}
 	as.mx.Unlock()
 }
