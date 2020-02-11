@@ -39,4 +39,12 @@ func (as *AmbientAutoNAT) Connected(net network.Network, c network.Conn) {
 	}()
 }
 
-func (as *AmbientAutoNAT) Disconnected(net network.Network, c network.Conn) {}
+func (as *AmbientAutoNAT) Disconnected(net network.Network, c network.Conn) {
+	if len(net.Conns()) == 0 {
+		select {
+		case as.networkChange <- struct{}{}:
+		default:
+		}
+		return
+	}
+}

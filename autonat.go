@@ -63,6 +63,8 @@ type AmbientAutoNAT struct {
 	// for each failure until it reaches 3.
 	confidence int
 
+	networkChange chan struct{}
+
 	emitUnknown event.Emitter
 	emitPublic  event.Emitter
 	emitPrivate event.Emitter
@@ -80,11 +82,12 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate))
 
 	as := &AmbientAutoNAT{
-		ctx:      ctx,
-		host:     h,
-		getAddrs: getAddrs,
-		peers:    make(map[peer.ID][]ma.Multiaddr),
-		status:   NATStatusUnknown,
+		ctx:           ctx,
+		host:          h,
+		getAddrs:      getAddrs,
+		peers:         make(map[peer.ID][]ma.Multiaddr),
+		status:        NATStatusUnknown,
+		networkChange: make(chan struct{}, 1),
 
 		emitUnknown: emitUnknown,
 		emitPublic:  emitPublic,
@@ -144,6 +147,7 @@ func (as *AmbientAutoNAT) background() {
 		}
 
 		select {
+		case <-as.networkChange:
 		case <-time.After(delay):
 		case <-as.ctx.Done():
 			return
