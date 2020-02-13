@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 
 	autonat "github.com/libp2p/go-libp2p-autonat"
+	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
@@ -101,6 +102,8 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceThrottle = 1
 	save4 := manet.Private4
 	manet.Private4 = []*net.IPNet{}
+	save5 := AutoNATServiceResetJitter
+	AutoNATServiceResetJitter = 0 * time.Second
 
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, ac := makeAutoNATClient(ctx, t)
@@ -131,4 +134,31 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceResetInterval = save2
 	AutoNATServiceThrottle = save3
 	manet.Private4 = save4
+	AutoNATServiceResetJitter = save5
+}
+
+func TestAddrToIP(t *testing.T) {
+	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
+	if !addrToIP(addr).Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatal("addrToIP of ipv4 localhost incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/ip4/192.168.0.1/tcp/6")
+	if !addrToIP(addr).Equal(net.IPv4(192, 168, 0, 1)) {
+		t.Fatal("addrToIP of ipv4 incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/ip6/::ffff:127.0.0.1/tcp/111")
+	if !addrToIP(addr).Equal(net.ParseIP("::ffff:127.0.0.1")) {
+		t.Fatal("addrToIP of ipv6 incorrect!")
+	}
+	addr, _ = ma.NewMultiaddr("/ip6zone/eth0/ip6/fe80::1")
+	if !addrToIP(addr).Equal(net.ParseIP("fe80::1")) {
+		t.Fatal("addrToIP of ip6zone incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/unix/a/b/c/d")
+	if addrToIP(addr) != nil {
+		t.Fatal("invalid addrToIP populates")
+	}
 }
