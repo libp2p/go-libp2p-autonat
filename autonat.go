@@ -51,9 +51,12 @@ type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
 
+	getAddrs GetAddrs
+
 	candidatePeers chan network.Conn
 	observations   chan autoNATResult
-	status         atomic.Value
+	// status is an autoNATResult reflecting current status.
+	status atomic.Value
 	// Reflects the confidence on of the NATStatus being private, as a single
 	// dialback may fail for reasons unrelated to NAT.
 	// If it is <3, then multiple autoNAT peers may be contacted for dialback
@@ -74,7 +77,12 @@ type autoNATResult struct {
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
-func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
+// If getAddrs is nil, h.Addrs will be used
+func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
+	if getAddrs == nil {
+		getAddrs = h.Addrs
+	}
+
 	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown))
 	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic))
 	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate))
@@ -82,6 +90,7 @@ func NewAutoNAT(ctx context.Context, h host.Host) AutoNAT {
 	as := &AmbientAutoNAT{
 		ctx:            ctx,
 		host:           h,
+		getAddrs:       getAddrs,
 		candidatePeers: make(chan network.Conn, 5),
 		observations:   make(chan autoNATResult, 1),
 
@@ -227,7 +236,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 }
 
 func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
-	cli := NewAutoNATClient(as.host)
+	cli := NewAutoNATClient(as.host, as.getAddrs)
 	ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
 	defer cancel()
 
