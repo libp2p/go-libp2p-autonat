@@ -74,6 +74,7 @@ func newDialResponseError(status pb.Message_ResponseStatus, text string) *pb.Mes
 func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, AutoNAT) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
+	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
 	a := NewAutoNAT(ctx, h, nil)
 	return h, a
 }

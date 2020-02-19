@@ -266,6 +266,10 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 
 	for _, p := range peers {
 		info := as.host.Peerstore().PeerInfo(p)
+		// Exclude peers which don't support the autonat protocol.
+		if proto, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto); len(proto) == 0 || err != nil {
+			continue
+		}
 		if as.host.Network().Connectedness(p) == network.Connected {
 			connected = append(connected, info)
 		} else {
