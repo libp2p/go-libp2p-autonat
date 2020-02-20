@@ -107,7 +107,7 @@ func TestAutoNATPrivate(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	status = an.Status()
 	if status != NATStatusPrivate {
@@ -145,7 +145,7 @@ func TestAutoNATPublic(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(2 * time.Second)
+	time.Sleep(1 * time.Second)
 
 	status = an.Status()
 	if status != NATStatusPublic {
@@ -161,5 +161,51 @@ func TestAutoNATPublic(t *testing.T) {
 
 	case <-time.After(1 * time.Second):
 		t.Fatal("failed to get the EvtLocalRoutabilityPublic event from the bus")
+	}
+}
+
+func TestAutoNATPublictoPrivate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := makeAutoNATServicePublic(ctx, t)
+	hc, an := makeAutoNAT(ctx, t, hs)
+
+	// subscribe to AutoNat events
+	s, err := hc.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
+	if err != nil {
+		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
+	}
+
+	status := an.Status()
+	if status != NATStatusUnknown {
+		t.Fatalf("unexpected NAT status: %d", status)
+	}
+
+	connect(t, hs, hc)
+	time.Sleep(1 * time.Second)
+
+	status = an.Status()
+	if status != NATStatusPublic {
+		t.Fatalf("unexpected NAT status: %d", status)
+	}
+
+	select {
+	case e := <-s.Out():
+		_, ok := e.(event.EvtLocalRoutabilityPublic)
+		if !ok {
+			t.Fatal("got wrong event type from the bus")
+		}
+
+	case <-time.After(1 * time.Second):
+		t.Fatal("failed to get the EvtLocalRoutabilityPublic event from the bus")
+	}
+
+	hs.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
+	time.Sleep(1 * time.Second)
+
+	status = an.Status()
+	if status != NATStatusPrivate {
+		t.Fatalf("unexpected NAT status: %d", status)
 	}
 }
