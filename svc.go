@@ -3,8 +3,10 @@ package autonat
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +33,7 @@ var (
 
 	AutoNATServiceThrottle  = 3
 	AutoNATGlobalThrottle   = 30
-	AutoNATMaxPeerAddresses = 4
+	AutoNATMaxPeerAddresses = 16
 )
 
 // AutoNATService provides NAT autodetection services to other peers
@@ -105,17 +107,30 @@ func (as *AutoNATService) handleStream(s network.Stream) {
 
 // Optimistically extract the net.IP host from a multiaddress.
 func addrToIP(addr ma.Multiaddr) net.IP {
-	if v4, err := addr.ValueForProtocol(ma.P_IP4); err == nil {
-		if c, err := ma.NewComponent(ma.ProtocolWithCode(ma.P_IP4).Name, v4); err == nil {
-			return net.IP(c.RawValue())
-		}
+	n, ip, err := manet.DialArgs(addr)
+	if err != nil {
+		return nil
 	}
-	if v6, err := addr.ValueForProtocol(ma.P_IP6); err == nil {
-		if c, err := ma.NewComponent(ma.ProtocolWithCode(ma.P_IP6).Name, v6); err == nil {
-			return net.IP(c.RawValue())
+
+	// if no port:
+	if n == "ip" || n == "ip4" || n == "ip6" {
+		// Strip v6 zone if it's there.
+		if strings.Contains(ip, "%") {
+			ip = ip[:strings.Index(ip, "%")]
 		}
+		return net.ParseIP(ip)
 	}
-	return nil
+
+	ip, _, err = net.SplitHostPort(ip)
+	if err != nil {
+		fmt.Printf("failed to split: %v", err)
+		return nil
+	}
+	// Strip v6 zone if it's there.
+	if strings.Contains(ip, "%") {
+		ip = ip[:strings.Index(ip, "%")]
+	}
+	return net.ParseIP(ip)
 }
 
 func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
@@ -153,18 +168,10 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if len(addrs) >= AutoNATMaxPeerAddresses {
-			continue
-		}
-
 		if as.skipDial(addr) {
 			continue
 		}
 
-		if err != nil {
-			log.Debugf("Unexpected public, non-IP multiaddr: %s", err)
-			continue
-		}
 		if !bytes.Equal(obsHost, addrToIP(addr)) {
 			continue
 		}
@@ -177,6 +184,10 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 
 		addrs = append(addrs, addr)
 		seen[str] = struct{}{}
+
+		if len(addrs) >= AutoNATMaxPeerAddresses {
+			break
+		}
 	}
 
 	if len(addrs) == 0 {
