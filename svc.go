@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -51,9 +52,21 @@ func NewAutoNATService(ctx context.Context, h host.Host, opts ...libp2p.Option) 
 		dialer: dialer,
 		reqs:   make(map[peer.ID]int),
 	}
-	h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
 
-	go as.resetRateLimiter()
+	s, err := h.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		defer s.Close()
+		select {
+		case <-s.Out():
+			h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
+			go as.resetRateLimiter()
+		case <-ctx.Done():
+		}
+	}()
 
 	return as, nil
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 
@@ -24,6 +25,8 @@ func makeAutoNATService(ctx context.Context, t *testing.T) (host.Host, *AutoNATS
 	if err != nil {
 		t.Fatal(err)
 	}
+	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic))
+	emitPublic.Emit(event.EvtLocalRoutabilityPublic{})
 
 	return h, as
 }
