@@ -1,12 +1,10 @@
 package autonat
 
 import (
-	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -106,25 +104,23 @@ func (as *AutoNATService) handleStream(s network.Stream) {
 }
 
 // Optimistically extract the net.IP host from a multiaddress.
+// TODO: use upstream manet.ToIP
 func addrToIP(addr ma.Multiaddr) (net.IP, error) {
-	n, ip, err := manet.DialArgs(addr)
+	n, err := manet.ToNetAddr(addr)
 	if err != nil {
 		return nil, err
 	}
 
-	if strings.HasPrefix(n, "tcp") || strings.HasPrefix(n, "udp") {
-		ip, _, err = net.SplitHostPort(ip)
-	} else if !strings.HasPrefix(n, "ip") {
-		return nil, errors.New("non-ip multiaddr")
+	switch netAddr := n.(type) {
+	case *net.UDPAddr:
+		return netAddr.IP, nil
+	case *net.TCPAddr:
+		return netAddr.IP, nil
+	case *net.IPAddr:
+		return netAddr.IP, nil
+	default:
+		return nil, fmt.Errorf("non IP Multiaddr: %T", netAddr)
 	}
-	if err != nil {
-		return nil, err
-	}
-	// Strip v6 zone if it's there.
-	if strings.Contains(ip, "%") {
-		ip = ip[:strings.Index(ip, "%")]
-	}
-	return net.ParseIP(ip), nil
 }
 
 func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
@@ -166,7 +162,7 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if ip, err := addrToIP(addr); err != nil || !bytes.Equal(obsHost, ip) {
+		if ip, err := addrToIP(addr); err != nil || !obsHost.Equal(ip) {
 			continue
 		}
 

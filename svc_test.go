@@ -137,6 +137,26 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceResetJitter = save5
 }
 
+func TestAutoNATServiceRateLimitJitter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	save1 := AutoNATServiceResetInterval
+	AutoNATServiceResetInterval = 100 * time.Millisecond
+	save2 := AutoNATServiceResetJitter
+	AutoNATServiceResetJitter = 100 * time.Millisecond
+
+	_, svc := makeAutoNATService(ctx, t)
+	svc.globalReqs = 1
+	time.Sleep(200 * time.Millisecond)
+	if svc.globalReqs != 0 {
+		t.Fatal("reset of rate limitter occured slower than expected")
+	}
+
+	AutoNATServiceResetInterval = save1
+	AutoNATServiceResetJitter = save2
+}
+
 func TestAddrToIP(t *testing.T) {
 	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
 	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.IPv4(127, 0, 0, 1)) {
@@ -148,10 +168,6 @@ func TestAddrToIP(t *testing.T) {
 		t.Fatal("addrToIP of ipv4 incorrect!")
 	}
 
-	addr, _ = ma.NewMultiaddr("/ip6/::ffff:127.0.0.1/tcp/111")
-	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.ParseIP("::ffff:127.0.0.1")) {
-		t.Fatal("addrToIP of ipv6 incorrect!")
-	}
 	addr, _ = ma.NewMultiaddr("/ip6zone/eth0/ip6/fe80::1")
 	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.ParseIP("fe80::1")) {
 		t.Fatal("addrToIP of ip6zone incorrect!")
