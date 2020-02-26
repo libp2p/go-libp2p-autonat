@@ -66,6 +66,8 @@ type AmbientAutoNAT struct {
 	lastInbound time.Time
 	lastProbe   time.Time
 
+	subAddrChange event.Subscription
+
 	emitUnknown event.Emitter
 	emitPublic  event.Emitter
 	emitPrivate event.Emitter
@@ -83,6 +85,8 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs = h.Addrs
 	}
 
+	subAddrChange, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
+
 	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown))
 	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic))
 	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate))
@@ -93,6 +97,8 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs:       getAddrs,
 		candidatePeers: make(chan network.Conn, 5),
 		observations:   make(chan autoNATResult, 1),
+
+		subAddrChange: subAddrChange,
 
 		emitUnknown: emitUnknown,
 		emitPublic:  emitPublic,
@@ -138,6 +144,9 @@ func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
 	delay := AutoNATBootDelay
+
+	netChangeChan := as.subAddrChange.Out()
+
 	for {
 		select {
 		// new connection occured.
@@ -145,7 +154,11 @@ func (as *AmbientAutoNAT) background() {
 			if conn.Stat().Direction == network.DirInbound && manet.IsPublicAddr(conn.RemoteMultiaddr()) {
 				as.lastInbound = time.Now()
 			}
-		// TODO: network changed.
+
+		case <-netChangeChan:
+			if as.confidence > 1 {
+				as.confidence--
+			}
 
 		// probe finished.
 		case result := <-as.observations:
