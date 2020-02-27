@@ -32,6 +32,7 @@ var (
 // AutoNATService provides NAT autodetection services to other peers
 type AutoNATService struct {
 	ctx    context.Context
+	h      host.Host
 	dialer host.Host
 
 	// rate limiter
@@ -49,6 +50,7 @@ func NewAutoNATService(ctx context.Context, h host.Host, forceEnabled bool, opts
 
 	as := &AutoNATService{
 		ctx:    ctx,
+		h:      h,
 		dialer: dialer,
 		reqs:   make(map[peer.ID]int),
 	}
@@ -176,6 +178,13 @@ func (as *AutoNATService) skipDial(addr ma.Multiaddr) bool {
 	// skip private network (unroutable) addresses
 	if !manet.IsPublicAddr(addr) {
 		return true
+	}
+
+	// Skip dialing addresses we believe are the local node's
+	for _, localAddr := range as.h.Addrs() {
+		if localAddr.Equal(addr) {
+			return true
+		}
 	}
 
 	return false
