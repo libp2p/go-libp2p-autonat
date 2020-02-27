@@ -40,7 +40,7 @@ type AutoNATService struct {
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
-func NewAutoNATService(ctx context.Context, h host.Host, opts ...libp2p.Option) (*AutoNATService, error) {
+func NewAutoNATService(ctx context.Context, h host.Host, forceEnabled bool, opts ...libp2p.Option) (*AutoNATService, error) {
 	opts = append(opts, libp2p.NoListenAddrs)
 	dialer, err := libp2p.New(ctx, opts...)
 	if err != nil {
@@ -60,12 +60,15 @@ func NewAutoNATService(ctx context.Context, h host.Host, opts ...libp2p.Option) 
 
 	go func() {
 		defer s.Close()
-		select {
-		case <-s.Out():
-			h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
-			go as.resetRateLimiter()
-		case <-ctx.Done():
+		if !forceEnabled {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.Out():
+			}
 		}
+		h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
+		go as.resetRateLimiter()
 	}()
 
 	return as, nil
