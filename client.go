@@ -95,29 +95,28 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 		return nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
-	// validate dialer identity certificate
-	dialerId, err := dialerIdFromCertificate(res.DialResponse, nonce)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract dialerId from the Identity certificate, err=%s", err)
-	}
-	if dialerId == p {
-		return nil, errors.New("autoNat server & it's dialer should not have the same identity")
-	}
-
-	// validate that we did indeed get a connection from this Id
-	connTime, ok := c.inboundDials.Get(dialerId.String())
-	if !ok {
-		return nil, errors.New("no known inbound dial from the AutoNat server's dialer")
-	}
-
-	if !connTime.(time.Time).After(reqTime) {
-		return nil, errors.New("autoNat server didn't dial between now & request time")
-	}
-	c.inboundDials.Delete(dialerId.String())
-
 	status := res.GetDialResponse().GetStatus()
 	switch status {
 	case pb.Message_OK:
+		// validate dialer identity certificate
+		dialerId, err := dialerIdFromCertificate(res.DialResponse, nonce)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract dialerId from the Identity certificate, err=%s", err)
+		}
+		if dialerId == p {
+			return nil, errors.New("autoNat server & it's dialer should not have the same identity")
+		}
+
+		// validate that we did indeed get a connection from this Id
+		connTime, ok := c.inboundDials.Get(dialerId.String())
+		if !ok {
+			return nil, errors.New("no known inbound dial from the AutoNat server's dialer")
+		}
+		
+		if !connTime.(time.Time).After(reqTime) {
+			return nil, errors.New("autoNat server didn't dial between now & request time")
+		}
+		c.inboundDials.Delete(dialerId.String())
 		addr := res.GetDialResponse().GetAddr()
 		return ma.NewMultiaddrBytes(addr)
 

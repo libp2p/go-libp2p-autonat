@@ -2,7 +2,6 @@ package autonat
 
 import (
 	"context"
-	tnet "github.com/libp2p/go-libp2p-testing/net"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+	tnet "github.com/libp2p/go-libp2p-testing/net"
 	ma "github.com/multiformats/go-multiaddr"
 
 	ggio "github.com/gogo/protobuf/io"
