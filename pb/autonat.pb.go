@@ -5,7 +5,8 @@ package autonat_pb
 
 import (
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
+	proto "github.com/golang/protobuf/proto"
+	pb "github.com/libp2p/go-libp2p-core/crypto/pb"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -20,7 +21,7 @@ var _ = math.Inf
 // is compatible with the proto package it is being compiled against.
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
-const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
+const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
 type Message_MessageType int32
 
@@ -231,6 +232,7 @@ func (m *Message_PeerInfo) GetAddrs() [][]byte {
 
 type Message_Dial struct {
 	Peer                 *Message_PeerInfo `protobuf:"bytes,1,opt,name=peer" json:"peer,omitempty"`
+	Nonce                *uint64           `protobuf:"varint,2,opt,name=nonce" json:"nonce,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
 	XXX_unrecognized     []byte            `json:"-"`
 	XXX_sizecache        int32             `json:"-"`
@@ -276,20 +278,91 @@ func (m *Message_Dial) GetPeer() *Message_PeerInfo {
 	return nil
 }
 
+func (m *Message_Dial) GetNonce() uint64 {
+	if m != nil && m.Nonce != nil {
+		return *m.Nonce
+	}
+	return 0
+}
+
+// DialerIdentityCertificate is a certificate sent to the AutoNAT client by the AutoNat server
+// in response to a Dial request by the client.
+// It contains the public key of the dialer and a signature of the nonce
+// where nonce is a random uint64 sent to the server by the client in the dial request.
+// The signature proves that the server owns the private key of the dialer & hence the dialer itself.
+// This can then be used to correlate a dial response from the server with an actual incoming connection by verifying that
+// we did indeed get a connection from the peerId that the dialer public key maps to.
+// This ensures that a server can not lie about a successful dial attempt and mislead us with false positives.
+type Message_DialerIdentityCertificate struct {
+	PublicKey            *pb.PublicKey `protobuf:"bytes,1,opt,name=public_key,json=publicKey" json:"public_key,omitempty"`
+	Signature            []byte        `protobuf:"bytes,2,opt,name=signature" json:"signature,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}      `json:"-"`
+	XXX_unrecognized     []byte        `json:"-"`
+	XXX_sizecache        int32         `json:"-"`
+}
+
+func (m *Message_DialerIdentityCertificate) Reset()         { *m = Message_DialerIdentityCertificate{} }
+func (m *Message_DialerIdentityCertificate) String() string { return proto.CompactTextString(m) }
+func (*Message_DialerIdentityCertificate) ProtoMessage()    {}
+func (*Message_DialerIdentityCertificate) Descriptor() ([]byte, []int) {
+	return fileDescriptor_a04e278ef61ac07a, []int{0, 2}
+}
+func (m *Message_DialerIdentityCertificate) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *Message_DialerIdentityCertificate) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_Message_DialerIdentityCertificate.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *Message_DialerIdentityCertificate) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Message_DialerIdentityCertificate.Merge(m, src)
+}
+func (m *Message_DialerIdentityCertificate) XXX_Size() int {
+	return m.Size()
+}
+func (m *Message_DialerIdentityCertificate) XXX_DiscardUnknown() {
+	xxx_messageInfo_Message_DialerIdentityCertificate.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_Message_DialerIdentityCertificate proto.InternalMessageInfo
+
+func (m *Message_DialerIdentityCertificate) GetPublicKey() *pb.PublicKey {
+	if m != nil {
+		return m.PublicKey
+	}
+	return nil
+}
+
+func (m *Message_DialerIdentityCertificate) GetSignature() []byte {
+	if m != nil {
+		return m.Signature
+	}
+	return nil
+}
+
 type Message_DialResponse struct {
-	Status               *Message_ResponseStatus `protobuf:"varint,1,opt,name=status,enum=autonat.pb.Message_ResponseStatus" json:"status,omitempty"`
-	StatusText           *string                 `protobuf:"bytes,2,opt,name=statusText" json:"statusText,omitempty"`
-	Addr                 []byte                  `protobuf:"bytes,3,opt,name=addr" json:"addr,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
-	XXX_unrecognized     []byte                  `json:"-"`
-	XXX_sizecache        int32                   `json:"-"`
+	Status                    *Message_ResponseStatus            `protobuf:"varint,1,opt,name=status,enum=autonat.pb.Message_ResponseStatus" json:"status,omitempty"`
+	StatusText                *string                            `protobuf:"bytes,2,opt,name=statusText" json:"statusText,omitempty"`
+	Addr                      []byte                             `protobuf:"bytes,3,opt,name=addr" json:"addr,omitempty"`
+	DialerIdentityCertificate *Message_DialerIdentityCertificate `protobuf:"bytes,4,opt,name=dialer_identity_certificate,json=dialerIdentityCertificate" json:"dialer_identity_certificate,omitempty"`
+	XXX_NoUnkeyedLiteral      struct{}                           `json:"-"`
+	XXX_unrecognized          []byte                             `json:"-"`
+	XXX_sizecache             int32                              `json:"-"`
 }
 
 func (m *Message_DialResponse) Reset()         { *m = Message_DialResponse{} }
 func (m *Message_DialResponse) String() string { return proto.CompactTextString(m) }
 func (*Message_DialResponse) ProtoMessage()    {}
 func (*Message_DialResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_a04e278ef61ac07a, []int{0, 2}
+	return fileDescriptor_a04e278ef61ac07a, []int{0, 3}
 }
 func (m *Message_DialResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -339,43 +412,60 @@ func (m *Message_DialResponse) GetAddr() []byte {
 	return nil
 }
 
+func (m *Message_DialResponse) GetDialerIdentityCertificate() *Message_DialerIdentityCertificate {
+	if m != nil {
+		return m.DialerIdentityCertificate
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterEnum("autonat.pb.Message_MessageType", Message_MessageType_name, Message_MessageType_value)
 	proto.RegisterEnum("autonat.pb.Message_ResponseStatus", Message_ResponseStatus_name, Message_ResponseStatus_value)
 	proto.RegisterType((*Message)(nil), "autonat.pb.Message")
 	proto.RegisterType((*Message_PeerInfo)(nil), "autonat.pb.Message.PeerInfo")
 	proto.RegisterType((*Message_Dial)(nil), "autonat.pb.Message.Dial")
+	proto.RegisterType((*Message_DialerIdentityCertificate)(nil), "autonat.pb.Message.DialerIdentityCertificate")
 	proto.RegisterType((*Message_DialResponse)(nil), "autonat.pb.Message.DialResponse")
 }
 
 func init() { proto.RegisterFile("autonat.proto", fileDescriptor_a04e278ef61ac07a) }
 
 var fileDescriptor_a04e278ef61ac07a = []byte{
-	// 372 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x90, 0xcf, 0x8a, 0xda, 0x50,
-	0x14, 0xc6, 0xbd, 0x31, 0xb5, 0xf6, 0x18, 0xc3, 0xed, 0xa1, 0x85, 0x20, 0x25, 0x0d, 0x59, 0x49,
-	0x29, 0x22, 0x76, 0x53, 0xba, 0x53, 0x72, 0x0b, 0xd2, 0x56, 0xed, 0x49, 0x5c, 0x87, 0x94, 0xdc,
-	0x0e, 0x01, 0x31, 0x21, 0x89, 0x30, 0x6e, 0xe6, 0x89, 0x66, 0x3b, 0xef, 0xe0, 0x72, 0x1e, 0x61,
-	0xf0, 0x49, 0x86, 0x5c, 0xa3, 0xa3, 0xe0, 0xac, 0xce, 0x1f, 0x7e, 0xdf, 0x39, 0x1f, 0x1f, 0x74,
-	0xa3, 0x4d, 0x99, 0xae, 0xa3, 0x72, 0x90, 0xe5, 0x69, 0x99, 0x22, 0x9c, 0xc6, 0x7f, 0xee, 0x83,
-	0x0e, 0x6f, 0xff, 0xc8, 0xa2, 0x88, 0x6e, 0x24, 0x7e, 0x03, 0xbd, 0xdc, 0x66, 0xd2, 0x62, 0x0e,
-	0xeb, 0x9b, 0xa3, 0xcf, 0x83, 0x17, 0x6c, 0x50, 0x23, 0xc7, 0x1a, 0x6c, 0x33, 0x49, 0x0a, 0xc6,
-	0xaf, 0xa0, 0xc7, 0x49, 0xb4, 0xb2, 0x34, 0x87, 0xf5, 0x3b, 0x23, 0xeb, 0x9a, 0xc8, 0x4b, 0xa2,
-	0x15, 0x29, 0x0a, 0x3d, 0x30, 0xaa, 0x4a, 0xb2, 0xc8, 0xd2, 0x75, 0x21, 0xad, 0xa6, 0x52, 0x39,
-	0xaf, 0xaa, 0x6a, 0x8e, 0x2e, 0x54, 0xbd, 0x21, 0xb4, 0x17, 0x52, 0xe6, 0xd3, 0xf5, 0xff, 0x14,
-	0x4d, 0xd0, 0x92, 0x58, 0x59, 0x36, 0x48, 0x4b, 0x62, 0xfc, 0x00, 0x6f, 0xa2, 0x38, 0xce, 0x0b,
-	0x4b, 0x73, 0x9a, 0x7d, 0x83, 0x0e, 0x43, 0xef, 0x3b, 0xe8, 0xd5, 0x3d, 0x1c, 0x82, 0x9e, 0x49,
-	0x99, 0x2b, 0xbe, 0x33, 0xfa, 0x74, 0xed, 0xef, 0xf1, 0x32, 0x29, 0xb2, 0x77, 0x07, 0xc6, 0xb9,
-	0x13, 0xfc, 0x01, 0xad, 0xa2, 0x8c, 0xca, 0x4d, 0x51, 0xc7, 0xe4, 0x5e, 0xbb, 0x71, 0xa4, 0x7d,
-	0x45, 0x52, 0xad, 0x40, 0x1b, 0xe0, 0xd0, 0x05, 0xf2, 0xb6, 0x54, 0x89, 0xbd, 0xa3, 0xb3, 0x0d,
-	0x22, 0xe8, 0x95, 0x5d, 0x95, 0x8a, 0x41, 0xaa, 0x77, 0xbf, 0x40, 0xe7, 0x2c, 0x74, 0x6c, 0x83,
-	0xee, 0x4d, 0xc7, 0xbf, 0x79, 0x03, 0xdf, 0x43, 0xb7, 0xea, 0x42, 0x12, 0xfe, 0x62, 0x3e, 0xf3,
-	0x05, 0x67, 0x6e, 0x02, 0xe6, 0xe5, 0x67, 0x6c, 0x81, 0x36, 0xff, 0xc5, 0x1b, 0xc8, 0xc1, 0x10,
-	0xa1, 0xc2, 0x05, 0xd1, 0x9c, 0x78, 0x8c, 0x08, 0x66, 0xbd, 0x21, 0xf1, 0x73, 0xe9, 0x0b, 0x8f,
-	0x4b, 0x44, 0xe8, 0x8a, 0x70, 0x32, 0xf6, 0x42, 0x12, 0x7f, 0x97, 0xc2, 0x0f, 0xf8, 0x8e, 0xe1,
-	0x47, 0xe0, 0x22, 0x9c, 0xce, 0x02, 0x41, 0xb3, 0x93, 0xfa, 0x5e, 0x9b, 0x18, 0xbb, 0xbd, 0xcd,
-	0x1e, 0xf7, 0x36, 0x7b, 0xda, 0xdb, 0xec, 0x39, 0x00, 0x00, 0xff, 0xff, 0x8e, 0xe2, 0x93, 0x4e,
-	0x61, 0x02, 0x00, 0x00,
+	// 521 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x52, 0xcd, 0x6e, 0xda, 0x4c,
+	0x14, 0xc5, 0x8e, 0x3f, 0xbe, 0x70, 0x31, 0xc8, 0xbd, 0x4a, 0x25, 0x87, 0x46, 0x14, 0xb1, 0x42,
+	0x55, 0x31, 0x11, 0x5d, 0x54, 0xea, 0x2e, 0x29, 0x53, 0x09, 0xa5, 0x05, 0x3a, 0x90, 0xb5, 0xe5,
+	0x9f, 0x09, 0x1d, 0x95, 0xd8, 0x23, 0x7b, 0x90, 0xea, 0x37, 0xe9, 0x3b, 0xb4, 0x0f, 0x92, 0x65,
+	0x1f, 0xa1, 0xa2, 0xeb, 0xbe, 0x43, 0xe5, 0xb1, 0x09, 0x44, 0x82, 0xd5, 0x9c, 0xb9, 0x73, 0xce,
+	0xb9, 0x3e, 0xf7, 0x1a, 0x1a, 0xde, 0x5a, 0xc6, 0x91, 0x27, 0x1d, 0x91, 0xc4, 0x32, 0x46, 0x78,
+	0xbc, 0xfa, 0xad, 0xb7, 0x4b, 0x2e, 0xbf, 0xac, 0x7d, 0x27, 0x88, 0xef, 0x07, 0x2b, 0xee, 0x8b,
+	0xa1, 0x18, 0x2c, 0xe3, 0x7e, 0x81, 0xfa, 0x41, 0x9c, 0xb0, 0x41, 0x90, 0x64, 0x42, 0xc6, 0x03,
+	0xe1, 0x97, 0xa8, 0x30, 0xe9, 0xfe, 0xa8, 0xc2, 0xff, 0x9f, 0x58, 0x9a, 0x7a, 0x4b, 0x86, 0x6f,
+	0xc0, 0x90, 0x99, 0x60, 0xb6, 0xd6, 0xd1, 0x7a, 0xcd, 0xe1, 0x4b, 0x67, 0xe7, 0xef, 0x94, 0x94,
+	0xed, 0xb9, 0xc8, 0x04, 0xa3, 0x8a, 0x8c, 0xaf, 0xc1, 0x08, 0xb9, 0xb7, 0xb2, 0xf5, 0x8e, 0xd6,
+	0xab, 0x0f, 0xed, 0x43, 0xa2, 0x11, 0xf7, 0x56, 0x54, 0xb1, 0x70, 0x04, 0x66, 0x7e, 0x52, 0x96,
+	0x8a, 0x38, 0x4a, 0x99, 0x7d, 0xa2, 0x54, 0x9d, 0xa3, 0xaa, 0x92, 0x47, 0x9f, 0xa8, 0x5a, 0x97,
+	0x70, 0x3a, 0x63, 0x2c, 0x19, 0x47, 0x77, 0x31, 0x36, 0x41, 0xe7, 0xa1, 0xfa, 0x64, 0x93, 0xea,
+	0x3c, 0xc4, 0x33, 0xf8, 0xcf, 0x0b, 0xc3, 0x24, 0xb5, 0xf5, 0xce, 0x49, 0xcf, 0xa4, 0xc5, 0xa5,
+	0x35, 0x01, 0x23, 0xf7, 0xc3, 0x4b, 0x30, 0x04, 0x63, 0x89, 0xe2, 0xd7, 0x87, 0x17, 0x87, 0xfa,
+	0x6e, 0x9d, 0xa9, 0x62, 0xe6, 0x7e, 0x51, 0x1c, 0x05, 0x4c, 0x05, 0x34, 0x68, 0x71, 0x69, 0x45,
+	0x70, 0x9e, 0xfb, 0xb1, 0x64, 0x1c, 0xb2, 0x48, 0x72, 0x99, 0xbd, 0x67, 0x89, 0xe4, 0x77, 0x3c,
+	0xf0, 0x64, 0x3e, 0x47, 0x10, 0x6b, 0x7f, 0xc5, 0x03, 0xf7, 0x2b, 0xcb, 0xca, 0x56, 0x67, 0xce,
+	0x76, 0xec, 0xbe, 0x33, 0x53, 0x8f, 0x37, 0x2c, 0xa3, 0x35, 0xb1, 0x85, 0x78, 0x01, 0xb5, 0x94,
+	0x2f, 0x23, 0x4f, 0xae, 0x93, 0xa2, 0x97, 0x49, 0x77, 0x85, 0xd6, 0x5f, 0x0d, 0xcc, 0xfd, 0x81,
+	0xe0, 0x3b, 0xa8, 0xa6, 0xd2, 0x93, 0xeb, 0xb4, 0xdc, 0x56, 0xf7, 0x50, 0x94, 0x2d, 0x7b, 0xae,
+	0x98, 0xb4, 0x54, 0x60, 0x1b, 0xa0, 0x40, 0x0b, 0xf6, 0x4d, 0xaa, 0x5e, 0x35, 0xba, 0x57, 0x41,
+	0x04, 0x23, 0x9f, 0x9a, 0x5a, 0x8e, 0x49, 0x15, 0xc6, 0x7b, 0x78, 0x11, 0xaa, 0xc0, 0x2e, 0x2f,
+	0x13, 0xbb, 0xc1, 0x2e, 0xb2, 0x6d, 0xa8, 0x90, 0xfd, 0x63, 0x7b, 0x3c, 0x38, 0x27, 0x7a, 0x1e,
+	0x1e, 0x7b, 0xea, 0xbe, 0x82, 0xfa, 0xde, 0xaf, 0x86, 0xa7, 0x60, 0x8c, 0xc6, 0x57, 0x1f, 0xad,
+	0x0a, 0x3e, 0x83, 0x46, 0x8e, 0x5c, 0x4a, 0xe6, 0xb3, 0xe9, 0x64, 0x4e, 0x2c, 0xad, 0xcb, 0xa1,
+	0xf9, 0x34, 0x28, 0x56, 0x41, 0x9f, 0xde, 0x58, 0x15, 0xb4, 0xc0, 0x24, 0xae, 0xa2, 0x13, 0x4a,
+	0xa7, 0xd4, 0x0a, 0x11, 0xa1, 0x59, 0x56, 0x28, 0xf9, 0x70, 0x3b, 0x27, 0x23, 0x8b, 0x21, 0x42,
+	0x83, 0xb8, 0xd7, 0x57, 0x23, 0x97, 0x92, 0xcf, 0xb7, 0x64, 0xbe, 0xb0, 0x1e, 0x34, 0x7c, 0x0e,
+	0x16, 0x71, 0xc7, 0x93, 0x05, 0xa1, 0x93, 0x47, 0xf5, 0x4f, 0xfd, 0xda, 0x7a, 0xd8, 0xb4, 0xb5,
+	0x5f, 0x9b, 0xb6, 0xf6, 0x7b, 0xd3, 0xd6, 0xbe, 0xff, 0x69, 0x57, 0xfe, 0x05, 0x00, 0x00, 0xff,
+	0xff, 0x48, 0x23, 0x11, 0x7c, 0x94, 0x03, 0x00, 0x00,
 }
 
 func (m *Message) Marshal() (dAtA []byte, err error) {
@@ -501,9 +591,60 @@ func (m *Message_Dial) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
 	}
+	if m.Nonce != nil {
+		i = encodeVarintAutonat(dAtA, i, uint64(*m.Nonce))
+		i--
+		dAtA[i] = 0x10
+	}
 	if m.Peer != nil {
 		{
 			size, err := m.Peer.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAutonat(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *Message_DialerIdentityCertificate) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Message_DialerIdentityCertificate) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *Message_DialerIdentityCertificate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.Signature != nil {
+		i -= len(m.Signature)
+		copy(dAtA[i:], m.Signature)
+		i = encodeVarintAutonat(dAtA, i, uint64(len(m.Signature)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.PublicKey != nil {
+		{
+			size, err := m.PublicKey.MarshalToSizedBuffer(dAtA[:i])
 			if err != nil {
 				return 0, err
 			}
@@ -539,6 +680,18 @@ func (m *Message_DialResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	if m.XXX_unrecognized != nil {
 		i -= len(m.XXX_unrecognized)
 		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if m.DialerIdentityCertificate != nil {
+		{
+			size, err := m.DialerIdentityCertificate.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintAutonat(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
 	}
 	if m.Addr != nil {
 		i -= len(m.Addr)
@@ -628,6 +781,29 @@ func (m *Message_Dial) Size() (n int) {
 		l = m.Peer.Size()
 		n += 1 + l + sovAutonat(uint64(l))
 	}
+	if m.Nonce != nil {
+		n += 1 + sovAutonat(uint64(*m.Nonce))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Message_DialerIdentityCertificate) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.PublicKey != nil {
+		l = m.PublicKey.Size()
+		n += 1 + l + sovAutonat(uint64(l))
+	}
+	if m.Signature != nil {
+		l = len(m.Signature)
+		n += 1 + l + sovAutonat(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -649,6 +825,10 @@ func (m *Message_DialResponse) Size() (n int) {
 	}
 	if m.Addr != nil {
 		l = len(m.Addr)
+		n += 1 + l + sovAutonat(uint64(l))
+	}
+	if m.DialerIdentityCertificate != nil {
+		l = m.DialerIdentityCertificate.Size()
 		n += 1 + l + sovAutonat(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -994,6 +1174,150 @@ func (m *Message_Dial) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Nonce", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAutonat
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Nonce = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAutonat(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Message_DialerIdentityCertificate) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAutonat
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DialerIdentityCertificate: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DialerIdentityCertificate: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PublicKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAutonat
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PublicKey == nil {
+				m.PublicKey = &pb.PublicKey{}
+			}
+			if err := m.PublicKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAutonat
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signature = append(m.Signature[:0], dAtA[iNdEx:postIndex]...)
+			if m.Signature == nil {
+				m.Signature = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAutonat(dAtA[iNdEx:])
@@ -1135,6 +1459,42 @@ func (m *Message_DialResponse) Unmarshal(dAtA []byte) error {
 				m.Addr = []byte{}
 			}
 			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DialerIdentityCertificate", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAutonat
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthAutonat
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DialerIdentityCertificate == nil {
+				m.DialerIdentityCertificate = &Message_DialerIdentityCertificate{}
+			}
+			if err := m.DialerIdentityCertificate.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAutonat(dAtA[iNdEx:])
@@ -1217,9 +1577,6 @@ func skipAutonat(dAtA []byte) (n int, err error) {
 				return 0, ErrInvalidLengthAutonat
 			}
 			iNdEx += length
-			if iNdEx < 0 {
-				return 0, ErrInvalidLengthAutonat
-			}
 		case 3:
 			depth++
 		case 4:
@@ -1231,6 +1588,9 @@ func skipAutonat(dAtA []byte) (n int, err error) {
 			iNdEx += 4
 		default:
 			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthAutonat
 		}
 		if depth == 0 {
 			return iNdEx, nil

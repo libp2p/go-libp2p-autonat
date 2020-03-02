@@ -2,6 +2,8 @@ syntax = "proto2";
 
 package autonat.pb;
 
+import "github.com/libp2p/go-libp2p-core/crypto/pb/crypto.proto";
+
 message Message {
   enum MessageType {
     DIAL          = 0;
@@ -23,12 +25,27 @@ message Message {
 
   message Dial {
     optional PeerInfo peer = 1;
+    optional uint64 nonce = 2;
+  }
+
+  // DialerIdentityCertificate is a certificate sent to the AutoNAT client by the AutoNat server
+  // in response to a Dial request by the client.
+  // It contains the public key of the dialer and a signature of the nonce
+  // where nonce is a random uint64 sent to the server by the client in the dial request.
+  // The signature proves that the server owns the private key of the dialer & hence the dialer itself.
+  // This can then be used to correlate a dial response from the server with an actual incoming connection by verifying that
+  // we did indeed get a connection from the peerId that the dialer public key maps to.
+  // This ensures that a server can not lie about a successful dial attempt and mislead us with false positives.
+  message DialerIdentityCertificate {
+      optional crypto.pb.PublicKey public_key = 1;
+      optional bytes signature = 2;
   }
 
   message DialResponse {
     optional ResponseStatus status = 1;
     optional string statusText = 2;
     optional bytes addr = 3;
+    optional DialerIdentityCertificate dialer_identity_certificate = 4;
   }
 
   optional MessageType type = 1;
