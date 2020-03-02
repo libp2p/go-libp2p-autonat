@@ -2,16 +2,22 @@ package autonat
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand"
+	"time"
 
-	pb "github.com/libp2p/go-libp2p-autonat/pb"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/helpers"
-
-	ggio "github.com/gogo/protobuf/io"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+
+	ggio "github.com/gogo/protobuf/io"
+	pb "github.com/libp2p/go-libp2p-autonat/pb"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/multiformats/go-varint"
+	"github.com/patrickmn/go-cache"
 )
 
 // AutoNATClient is a stateless client interface to AutoNAT peers
@@ -36,12 +42,25 @@ func NewAutoNATClient(h host.Host, getAddrs GetAddrs) AutoNATClient {
 	if getAddrs == nil {
 		getAddrs = h.Addrs
 	}
-	return &client{h: h, getAddrs: getAddrs}
+
+	c := &client{
+		h:            h,
+		getAddrs:     getAddrs,
+		inboundDials: cache.New(10*time.Minute, 10*time.Minute),
+	}
+
+	// listen to network notifications to track inbound dials
+	h.Network().Notify((*dialBackTracker)(c))
+
+	return c
 }
 
 type client struct {
 	h        host.Host
 	getAddrs GetAddrs
+
+	// this is thread-safe
+	inboundDials *cache.Cache
 }
 
 func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
@@ -56,7 +75,9 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	r := ggio.NewDelimitedReader(s, network.MessageSizeMax)
 	w := ggio.NewDelimitedWriter(s)
 
-	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: c.getAddrs()})
+	nonce := rand.Uint64()
+	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: c.getAddrs()}, nonce)
+	reqTime := time.Now()
 	err = w.WriteMsg(req)
 	if err != nil {
 		s.Reset()
@@ -74,6 +95,26 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 		return nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
+	// validate dialer identity certificate
+	dialerId, err := dialerIdFromCertificate(res.DialResponse, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract dialerId from the Identity certificate, err=%s", err)
+	}
+	if dialerId == p {
+		return nil, errors.New("autoNat server & it's dialer should not have the same identity")
+	}
+
+	// validate that we did indeed get a connection from this Id
+	connTime, ok := c.inboundDials.Get(dialerId.String())
+	if !ok {
+		return nil, errors.New("no known inbound dial from the AutoNat server's dialer")
+	}
+
+	if !connTime.(time.Time).After(reqTime) {
+		return nil, errors.New("autoNat server didn't dial between now & request time")
+	}
+	c.inboundDials.Delete(dialerId.String())
+
 	status := res.GetDialResponse().GetStatus()
 	switch status {
 	case pb.Message_OK:
@@ -83,6 +124,32 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	default:
 		return nil, AutoNATError{Status: status, Text: res.GetDialResponse().GetStatusText()}
 	}
+}
+
+func dialerIdFromCertificate(res *pb.Message_DialResponse, nonce uint64) (peer.ID, error) {
+	dc := res.DialerIdentityCertificate
+	if dc == nil {
+		return "", errors.New("server did not return an identity certificate for the dialer")
+	}
+	pk, err := crypto.PublicKeyFromProto(dc.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("dialer public key in identity certificate is not valid, err=%s", err)
+	}
+
+	valid, err := pk.Verify(varint.ToUvarint(nonce), dc.Signature)
+	if err != nil {
+		return "", fmt.Errorf("failed to verify signature on the dialer identity certificate, err=%s", err)
+	}
+	if !valid {
+		return "", errors.New("invalid signature on the dialer identity certificate")
+	}
+
+	// extract the peerId of the dialer
+	dialerId, err := peer.IDFromPublicKey(pk)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert the dialer public key to peerId,err=%s", err)
+	}
+	return dialerId, nil
 }
 
 func (e AutoNATError) Error() string {
