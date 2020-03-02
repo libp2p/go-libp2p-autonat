@@ -199,8 +199,6 @@ func connect(t *testing.T, ctx context.Context, a, b host.Host) {
 }
 
 func TestServerAttacks(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	tsts := map[string]struct {
 		streamFnc func(svc *mockAutoNatService)
@@ -222,6 +220,8 @@ func TestServerAttacks(t *testing.T) {
 	}
 
 	for k, ts := range tsts {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 		svc := mkMockAutoNatService(ctx, t)
 		ts.streamFnc(svc)
 		hc, an := makeAutoNAT(ctx, t, svc.h)
@@ -252,6 +252,7 @@ func TestAutoNATPrivate(t *testing.T) {
 
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalRoutabilityPrivate{})
+	defer s.Close()
 	if err != nil {
 		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPrivate, err=%s", err)
 	}
@@ -291,6 +292,7 @@ func TestAutoNATPublic(t *testing.T) {
 
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
+	defer s.Close()
 	if err != nil {
 		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
 	}
