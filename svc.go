@@ -2,6 +2,9 @@ package autonat
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
+	"net"
 	"sync"
 	"time"
 
@@ -25,8 +28,11 @@ const P_CIRCUIT = 290
 var (
 	AutoNATServiceDialTimeout   = 15 * time.Second
 	AutoNATServiceResetInterval = 1 * time.Minute
+	AutoNATServiceResetJitter   = 15 * time.Second
 
-	AutoNATServiceThrottle = 3
+	AutoNATServiceThrottle  = 3
+	AutoNATGlobalThrottle   = 30
+	AutoNATMaxPeerAddresses = 16
 )
 
 // AutoNATService provides NAT autodetection services to other peers
@@ -36,8 +42,9 @@ type AutoNATService struct {
 	dialer host.Host
 
 	// rate limiter
-	mx   sync.Mutex
-	reqs map[peer.ID]int
+	mx         sync.Mutex
+	reqs       map[peer.ID]int
+	globalReqs int
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
@@ -114,6 +121,26 @@ func (as *AutoNATService) handleStream(s network.Stream) {
 	}
 }
 
+// Optimistically extract the net.IP host from a multiaddress.
+// TODO: use upstream manet.ToIP
+func addrToIP(addr ma.Multiaddr) (net.IP, error) {
+	n, err := manet.ToNetAddr(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	switch netAddr := n.(type) {
+	case *net.UDPAddr:
+		return netAddr.IP, nil
+	case *net.TCPAddr:
+		return netAddr.IP, nil
+	case *net.IPAddr:
+		return netAddr.IP, nil
+	default:
+		return nil, fmt.Errorf("non IP Multiaddr: %T", netAddr)
+	}
+}
+
 func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
 	if mpi == nil {
 		return newDialResponseError(pb.Message_E_BAD_REQUEST, "missing peer info")
@@ -131,13 +158,15 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		}
 	}
 
-	addrs := make([]ma.Multiaddr, 0)
+	addrs := make([]ma.Multiaddr, 0, AutoNATMaxPeerAddresses)
 	seen := make(map[string]struct{})
 
 	// add observed addr to the list of addresses to dial
+	var obsHost net.IP
 	if !as.skipDial(obsaddr) {
 		addrs = append(addrs, obsaddr)
 		seen[obsaddr.String()] = struct{}{}
+		obsHost, _ = addrToIP(obsaddr)
 	}
 
 	for _, maddr := range mpi.GetAddrs() {
@@ -151,6 +180,10 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
+		if ip, err := addrToIP(addr); err != nil || !obsHost.Equal(ip) {
+			continue
+		}
+
 		str := addr.String()
 		_, ok := seen[str]
 		if ok {
@@ -159,6 +192,10 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 
 		addrs = append(addrs, addr)
 		seen[str] = struct{}{}
+
+		if len(addrs) >= AutoNATMaxPeerAddresses {
+			break
+		}
 	}
 
 	if len(addrs) == 0 {
@@ -194,15 +231,18 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	// rate limit check
 	as.mx.Lock()
 	count := as.reqs[pi.ID]
-	if count >= AutoNATServiceThrottle {
+	if count >= AutoNATServiceThrottle || as.globalReqs >= AutoNATGlobalThrottle {
 		as.mx.Unlock()
 		return newDialResponseError(pb.Message_E_DIAL_REFUSED, "too many dials")
 	}
 	as.reqs[pi.ID] = count + 1
+	as.globalReqs++
 	as.mx.Unlock()
 
 	ctx, cancel := context.WithTimeout(as.ctx, AutoNATServiceDialTimeout)
 	defer cancel()
+
+	as.dialer.Peerstore().ClearAddrs(pi.ID)
 
 	err := as.dialer.Connect(ctx, pi)
 	if err != nil {
@@ -225,16 +265,18 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 }
 
 func (as *AutoNATService) resetRateLimiter() {
-	ticker := time.NewTicker(AutoNATServiceResetInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(AutoNATServiceResetInterval)
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
 			as.mx.Lock()
 			as.reqs = make(map[peer.ID]int)
+			as.globalReqs = 0
 			as.mx.Unlock()
-
+			jitter := rand.Float32() * float32(AutoNATServiceResetJitter)
+			timer.Reset(AutoNATServiceResetInterval + time.Duration(int64(jitter)))
 		case <-as.ctx.Done():
 			return
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 
 	autonat "github.com/libp2p/go-libp2p-autonat"
+	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
@@ -101,6 +102,8 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceThrottle = 1
 	save4 := manet.Private4
 	manet.Private4 = []*net.IPNet{}
+	save5 := AutoNATServiceResetJitter
+	AutoNATServiceResetJitter = 0 * time.Second
 
 	hs, _ := makeAutoNATService(ctx, t)
 	hc, ac := makeAutoNATClient(ctx, t)
@@ -131,4 +134,47 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceResetInterval = save2
 	AutoNATServiceThrottle = save3
 	manet.Private4 = save4
+	AutoNATServiceResetJitter = save5
+}
+
+func TestAutoNATServiceRateLimitJitter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	save1 := AutoNATServiceResetInterval
+	AutoNATServiceResetInterval = 100 * time.Millisecond
+	save2 := AutoNATServiceResetJitter
+	AutoNATServiceResetJitter = 100 * time.Millisecond
+
+	_, svc := makeAutoNATService(ctx, t)
+	svc.globalReqs = 1
+	time.Sleep(200 * time.Millisecond)
+	if svc.globalReqs != 0 {
+		t.Fatal("reset of rate limitter occured slower than expected")
+	}
+
+	AutoNATServiceResetInterval = save1
+	AutoNATServiceResetJitter = save2
+}
+
+func TestAddrToIP(t *testing.T) {
+	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
+	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatal("addrToIP of ipv4 localhost incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/ip4/192.168.0.1/tcp/6")
+	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.IPv4(192, 168, 0, 1)) {
+		t.Fatal("addrToIP of ipv4 incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/ip6zone/eth0/ip6/fe80::1")
+	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.ParseIP("fe80::1")) {
+		t.Fatal("addrToIP of ip6zone incorrect!")
+	}
+
+	addr, _ = ma.NewMultiaddr("/unix/a/b/c/d")
+	if _, err := addrToIP(addr); err == nil {
+		t.Fatal("invalid addrToIP populates")
+	}
 }
