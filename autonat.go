@@ -207,9 +207,11 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	currentStatus := as.status.Load().(autoNATResult)
 	if observation.NATStatus == NATStatusPublic {
 		log.Debugf("NAT status is public")
+		changed := false
 		if currentStatus.NATStatus == NATStatusPrivate {
 			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
+			changed = true
 		} else if as.confidence < 3 {
 			as.confidence++
 		}
@@ -217,9 +219,12 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 			if currentStatus.address != nil && !observation.address.Equal(currentStatus.address) {
 				as.confidence--
 			}
+			if currentStatus.address == nil || !observation.address.Equal(currentStatus.address) {
+				changed = true
+			}
 			as.status.Store(observation)
 		}
-		if currentStatus.address != nil || observation.address != nil {
+		if observation.address != nil && changed {
 			as.emitStatus()
 		}
 	} else if observation.NATStatus == NATStatusPrivate {
@@ -236,7 +241,9 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		} else if as.confidence < 3 {
 			as.confidence++
 			as.status.Store(observation)
-			as.emitStatus()
+			if currentStatus.NATStatus != NATStatusPrivate {
+				as.emitStatus()
+			}
 		}
 	} else if as.confidence > 0 {
 		// don't just flip to unknown, reduce confidence first
@@ -244,7 +251,9 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	} else {
 		log.Debugf("NAT status is unknown")
 		as.status.Store(autoNATResult{NATStatusUnknown, nil})
-		as.emitStatus()
+		if currentStatus.NATStatus != NATStatusUnknown {
+			as.emitStatus()
+		}
 	}
 }
 
