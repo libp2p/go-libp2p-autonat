@@ -112,7 +112,7 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 		if !ok {
 			return nil, errors.New("no known inbound dial from the AutoNat server's dialer")
 		}
-		
+
 		if !connTime.(time.Time).After(reqTime) {
 			return nil, errors.New("autoNat server didn't dial between now & request time")
 		}
