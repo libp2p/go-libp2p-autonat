@@ -161,7 +161,10 @@ func (as *AmbientAutoNAT) background() {
 			}
 
 		// probe finished.
-		case result := <-as.observations:
+		case result, ok := <-as.observations:
+			if !ok {
+				return
+			}
 			as.recordObservation(result)
 		case <-time.After(delay):
 		case <-as.ctx.Done():
@@ -195,7 +198,6 @@ func (as *AmbientAutoNAT) scheduleProbe() time.Duration {
 		nextProbe = as.lastProbe.Add(untilNext)
 	}
 	if fixedNow.After(nextProbe) || fixedNow == nextProbe {
-		as.lastProbe = fixedNow
 		go as.probeNextPeer()
 		return AutoNATRetryInterval
 	}
@@ -208,7 +210,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	if observation.NATStatus == NATStatusPublic {
 		log.Debugf("NAT status is public")
 		changed := false
-		if currentStatus.NATStatus == NATStatusPrivate {
+		if currentStatus.NATStatus != NATStatusPublic {
 			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
 			changed = true
@@ -303,10 +305,12 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 	shufflePeers(connected)
 
 	if len(connected) > 0 {
+		as.lastProbe = time.Now()
 		as.probe(&connected[0])
 		return
 	} else if len(others) > 0 {
 		shufflePeers(others)
+		as.lastProbe = time.Now()
 		as.probe(&others[0])
 	}
 }
