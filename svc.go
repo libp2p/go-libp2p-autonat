@@ -42,9 +42,10 @@ type AutoNATService struct {
 	dialer host.Host
 
 	// rate limiter
-	mx         sync.Mutex
-	reqs       map[peer.ID]int
-	globalReqs int
+	mx           sync.Mutex
+	reqs         map[peer.ID]int
+	globalReqMax int
+	globalReqs   int
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
@@ -56,29 +57,20 @@ func NewAutoNATService(ctx context.Context, h host.Host, forceEnabled bool, opts
 	}
 
 	as := &AutoNATService{
-		ctx:    ctx,
-		h:      h,
-		dialer: dialer,
-		reqs:   make(map[peer.ID]int),
+		ctx:          ctx,
+		h:            h,
+		dialer:       dialer,
+		globalReqMax: AutoNATGlobalThrottle,
+		reqs:         make(map[peer.ID]int),
 	}
 
-	s, err := h.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		defer s.Close()
-		if !forceEnabled {
-			select {
-			case <-ctx.Done():
-				return
-			case <-s.Out():
-			}
-		}
+	if forceEnabled {
+		as.globalReqMax = 0
 		h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
 		go as.resetRateLimiter()
-	}()
+	} else {
+		go as.enableWhenPublic()
+	}
 
 	return as, nil
 }
@@ -231,7 +223,7 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	// rate limit check
 	as.mx.Lock()
 	count := as.reqs[pi.ID]
-	if count >= AutoNATServiceThrottle || as.globalReqs >= AutoNATGlobalThrottle {
+	if count >= AutoNATServiceThrottle || (as.globalReqMax > 0 && as.globalReqs >= as.globalReqMax) {
 		as.mx.Unlock()
 		return newDialResponseError(pb.Message_E_DIAL_REFUSED, "too many dials")
 	}
@@ -262,6 +254,30 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	ra := conns[0].RemoteMultiaddr()
 	as.dialer.Network().ClosePeer(pi.ID)
 	return newDialResponseOK(ra)
+}
+
+func (as *AutoNATService) enableWhenPublic() {
+	pubSub, _ := as.h.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
+	priSub, _ := as.h.EventBus().Subscribe(&event.EvtLocalRoutabilityPrivate{})
+	defer pubSub.Close()
+	defer priSub.Close()
+
+	running := false
+
+	for {
+		select {
+		case <-pubSub.Out():
+			as.h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
+			if !running {
+				go as.resetRateLimiter()
+				running = true
+			}
+		case <-priSub.Out():
+			as.h.RemoveStreamHandler(autonat.AutoNATProto)
+		case <-as.ctx.Done():
+			return
+		}
+	}
 }
 
 func (as *AutoNATService) resetRateLimiter() {
