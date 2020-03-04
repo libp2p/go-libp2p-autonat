@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
 
@@ -236,7 +237,8 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 
 	as.dialer.Peerstore().ClearAddrs(pi.ID)
 
-	err := as.dialer.Connect(ctx, pi)
+	as.dialer.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.TempAddrTTL)
+	conn, err := as.dialer.Network().DialPeer(ctx, pi.ID)
 	if err != nil {
 		log.Debugf("error dialing %s: %s", pi.ID.Pretty(), err.Error())
 		// wait for the context to timeout to avoid leaking timing information
@@ -245,13 +247,7 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 		return newDialResponseError(pb.Message_E_DIAL_ERROR, "dial failed")
 	}
 
-	conns := as.dialer.Network().ConnsToPeer(pi.ID)
-	if len(conns) == 0 {
-		log.Errorf("supposedly connected to %s, but no connection to peer", pi.ID.Pretty())
-		return newDialResponseError(pb.Message_E_INTERNAL_ERROR, "internal service error")
-	}
-
-	ra := conns[0].RemoteMultiaddr()
+	ra := conn.RemoteMultiaddr()
 	as.dialer.Network().ClosePeer(pi.ID)
 	return newDialResponseOK(ra)
 }
