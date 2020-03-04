@@ -13,6 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/libp2p/go-eventbus"
 )
 
 // NATStatus is the state of NAT as detected by the ambient service.
@@ -75,9 +77,9 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs = h.Addrs
 	}
 
-	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown))
-	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic))
-	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate))
+	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown), eventbus.Stateful)
+	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic), eventbus.Stateful)
+	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:      ctx,
