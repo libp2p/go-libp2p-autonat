@@ -205,7 +205,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	} else if observation.Reachability == network.ReachabilityPrivate {
 		log.Debugf("NAT status is private")
 		if currentStatus.Reachability == network.ReachabilityPublic {
-			if as.confidence < 1 {
+			if as.confidence > 1 {
 				as.confidence--
 			} else {
 				// we are flipping our NATStatus, so confidence drops to 0
