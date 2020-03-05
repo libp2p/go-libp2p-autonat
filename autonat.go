@@ -65,9 +65,7 @@ type AmbientAutoNAT struct {
 	// for each failure until it reaches 3.
 	confidence int
 
-	emitUnknown event.Emitter
-	emitPublic  event.Emitter
-	emitPrivate event.Emitter
+	emitter event.Emitter
 }
 
 // NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
@@ -77,9 +75,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs = h.Addrs
 	}
 
-	emitUnknown, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityUnknown), eventbus.Stateful)
-	emitPublic, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPublic), eventbus.Stateful)
-	emitPrivate, _ := h.EventBus().Emitter(new(event.EvtLocalRoutabilityPrivate), eventbus.Stateful)
+	emitUpdates, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:      ctx,
@@ -88,9 +84,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		peers:    make(map[peer.ID][]ma.Multiaddr),
 		status:   NATStatusUnknown,
 
-		emitUnknown: emitUnknown,
-		emitPublic:  emitPublic,
-		emitPrivate: emitPrivate,
+		emitter: emitUpdates,
 	}
 
 	h.Network().Notify(as)
@@ -107,14 +101,16 @@ func (as *AmbientAutoNAT) Status() NATStatus {
 
 func (as *AmbientAutoNAT) updateStatus(s NATStatus) {
 	as.status = s
+	evt := &event.EvtLocalReachabilityChanged{}
 	switch s {
 	case NATStatusUnknown:
-		as.emitUnknown.Emit(event.EvtLocalRoutabilityUnknown{})
+		evt.Reachability = network.ReachabilityUnknown
 	case NATStatusPublic:
-		as.emitPublic.Emit(event.EvtLocalRoutabilityPublic{})
+		evt.Reachability = network.ReachabilityPublic
 	case NATStatusPrivate:
-		as.emitPrivate.Emit(event.EvtLocalRoutabilityPrivate{})
+		evt.Reachability = network.ReachabilityPrivate
 	}
+	as.emitter.Emit(*evt)
 }
 
 func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
