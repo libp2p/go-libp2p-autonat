@@ -253,23 +253,27 @@ func (as *AutoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 }
 
 func (as *AutoNATService) enableWhenPublic() {
-	pubSub, _ := as.h.EventBus().Subscribe(&event.EvtLocalRoutabilityPublic{})
-	priSub, _ := as.h.EventBus().Subscribe(&event.EvtLocalRoutabilityPrivate{})
-	defer pubSub.Close()
-	defer priSub.Close()
+	sub, _ := as.h.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
+	defer sub.Close()
 
 	running := false
 
 	for {
 		select {
-		case <-pubSub.Out():
-			as.h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
-			if !running {
-				go as.resetRateLimiter()
-				running = true
+		case ev, ok := <-sub.Out():
+			if !ok {
+				return
 			}
-		case <-priSub.Out():
-			as.h.RemoveStreamHandler(autonat.AutoNATProto)
+			state := ev.(event.EvtLocalReachabilityChanged).Reachability
+			if state == network.ReachabilityPublic {
+				as.h.SetStreamHandler(autonat.AutoNATProto, as.handleStream)
+				if !running {
+					go as.resetRateLimiter()
+					running = true
+				}
+			} else {
+				as.h.RemoveStreamHandler(autonat.AutoNATProto)
+			}
 		case <-as.ctx.Done():
 			return
 		}
