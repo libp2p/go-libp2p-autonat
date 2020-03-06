@@ -139,7 +139,6 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 
 func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	save1 := AutoNATServiceResetInterval
 	AutoNATServiceResetInterval = 100 * time.Millisecond
@@ -147,11 +146,18 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	AutoNATServiceResetJitter = 100 * time.Millisecond
 
 	_, svc := makeAutoNATService(ctx, t)
+	svc.mx.Lock()
 	svc.globalReqs = 1
+	svc.mx.Unlock()
 	time.Sleep(200 * time.Millisecond)
+
+	svc.mx.Lock()
+	defer svc.mx.Unlock()
 	if svc.globalReqs != 0 {
 		t.Fatal("reset of rate limitter occured slower than expected")
 	}
+
+	cancel()
 
 	AutoNATServiceResetInterval = save1
 	AutoNATServiceResetJitter = save2
