@@ -98,7 +98,7 @@ func TestAutoNATPrivate(t *testing.T) {
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
 	if err != nil {
-		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPrivate, err=%s", err)
+		t.Fatalf("failed to subscribe to event EvtLocalReachabilityChanged, err=%s", err)
 	}
 
 	status := an.Status()
@@ -116,13 +116,17 @@ func TestAutoNATPrivate(t *testing.T) {
 
 	select {
 	case e := <-s.Out():
-		_, ok := e.(event.EvtLocalReachabilityChanged)
+		evt, ok := e.(event.EvtLocalReachabilityChanged)
 		if !ok {
 			t.Fatal("got wrong event type from the bus")
 		}
 
+		if evt.Reachability != network.ReachabilityPrivate {
+			t.Fatalf("received incorrect reachability event %v", evt)
+		}
+
 	case <-time.After(1 * time.Second):
-		t.Fatal("failed to get the EvtLocalRoutabilityPrivate event from the bus")
+		t.Fatal("failed to get the EvtLocalReachabilityChanged event from the bus")
 	}
 }
 
@@ -136,7 +140,7 @@ func TestAutoNATPublic(t *testing.T) {
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
 	if err != nil {
-		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
+		t.Fatalf("failed to subscribe to event EvtLocalReachabilityChanged, err=%s", err)
 	}
 
 	status := an.Status()
@@ -154,13 +158,17 @@ func TestAutoNATPublic(t *testing.T) {
 
 	select {
 	case e := <-s.Out():
-		_, ok := e.(event.EvtLocalReachabilityChanged)
+		evt, ok := e.(event.EvtLocalReachabilityChanged)
 		if !ok {
 			t.Fatal("got wrong event type from the bus")
 		}
 
+		if evt.Reachability != network.ReachabilityPublic {
+			t.Fatalf("received incorrect reachability event %v", evt)
+		}
+
 	case <-time.After(1 * time.Second):
-		t.Fatal("failed to get the EvtLocalRoutabilityPublic event from the bus")
+		t.Fatal("failed to get the EvtLocalReachabilityChanged event from the bus")
 	}
 }
 

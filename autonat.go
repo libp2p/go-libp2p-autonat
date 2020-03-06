@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-eventbus"
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
@@ -71,7 +72,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 
 	subAddrChange, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
 
-	emitChange, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged))
+	emitChange, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:            ctx,
