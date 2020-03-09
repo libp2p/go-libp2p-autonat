@@ -7,12 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/libp2p/go-eventbus"
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	"github.com/libp2p/go-libp2p-core/peerstore"
+
+	"github.com/libp2p/go-eventbus"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
@@ -53,9 +54,9 @@ type AmbientAutoNAT struct {
 	lastInbound time.Time
 	lastProbe   time.Time
 
-	subAddrChange event.Subscription
+	subAddrUpdated event.Subscription
 
-	emitChange event.Emitter
+	emitReachabilityChanged event.Emitter
 }
 
 type autoNATResult struct {
@@ -70,9 +71,9 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		getAddrs = h.Addrs
 	}
 
-	subAddrChange, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
+	subAddrUpdated, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
 
-	emitChange, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
+	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:            ctx,
@@ -81,9 +82,9 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 		candidatePeers: make(chan network.Conn, 5),
 		observations:   make(chan autoNATResult, 1),
 
-		subAddrChange: subAddrChange,
+		subAddrUpdated: subAddrUpdated,
 
-		emitChange: emitChange,
+		emitReachabilityChanged: emitReachabilityChanged,
 	}
 	as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 
@@ -101,7 +102,7 @@ func (as *AmbientAutoNAT) Status() network.Reachability {
 
 func (as *AmbientAutoNAT) emitStatus() {
 	status := as.status.Load().(autoNATResult)
-	as.emitChange.Emit(event.EvtLocalReachabilityChanged{Reachability: status.Reachability})
+	as.emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: status.Reachability})
 }
 
 // PublicAddr returns the publicly connectable Multiaddr of this node if one is known.
@@ -119,7 +120,9 @@ func (as *AmbientAutoNAT) background() {
 	// before starting autodetection
 	delay := AutoNATBootDelay
 
-	netChangeChan := as.subAddrChange.Out()
+	addrUpdatedChan := as.subAddrUpdated.Out()
+	defer as.subAddrUpdated.Close()
+	defer as.emitReachabilityChanged.Close()
 
 	for {
 		select {
@@ -129,7 +132,7 @@ func (as *AmbientAutoNAT) background() {
 				as.lastInbound = time.Now()
 			}
 
-		case <-netChangeChan:
+		case <-addrUpdatedChan:
 			if as.confidence > 1 {
 				as.confidence--
 			}
@@ -164,10 +167,10 @@ func (as *AmbientAutoNAT) scheduleProbe() time.Duration {
 		untilNext := AutoNATRefreshInterval
 		if currentStatus.Reachability == network.ReachabilityUnknown {
 			untilNext = AutoNATRetryInterval
-		} else if currentStatus.Reachability == network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
-			untilNext *= 2
 		} else if as.confidence < 3 {
 			untilNext = AutoNATRetryInterval
+		} else if currentStatus.Reachability == network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
+			untilNext *= 2
 		}
 		nextProbe = as.lastProbe.Add(untilNext)
 	}
@@ -192,7 +195,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 			as.confidence++
 		}
 		if observation.address != nil {
-			if currentStatus.address != nil && !observation.address.Equal(currentStatus.address) {
+			if !changed && currentStatus.address != nil && !observation.address.Equal(currentStatus.address) {
 				as.confidence--
 			}
 			if currentStatus.address == nil || !observation.address.Equal(currentStatus.address) {
@@ -206,7 +209,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	} else if observation.Reachability == network.ReachabilityPrivate {
 		log.Debugf("NAT status is private")
 		if currentStatus.Reachability == network.ReachabilityPublic {
-			if as.confidence > 1 {
+			if as.confidence > 0 {
 				as.confidence--
 			} else {
 				// we are flipping our NATStatus, so confidence drops to 0

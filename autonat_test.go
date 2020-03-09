@@ -87,6 +87,19 @@ func connect(t *testing.T, a, b host.Host) {
 	}
 }
 
+func expectEvent(t *testing.T, s event.Subscription, expected network.Reachability) {
+	select {
+	case e := <-s.Out():
+		ev, ok := e.(event.EvtLocalReachabilityChanged)
+		if !ok || ev.Reachability != expected {
+			t.Fatal("got wrong event type from the bus")
+		}
+
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("failed to get the reachability event from the bus")
+	}
+}
+
 // tests
 func TestAutoNATPrivate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,20 +127,7 @@ func TestAutoNATPrivate(t *testing.T) {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
 
-	select {
-	case e := <-s.Out():
-		evt, ok := e.(event.EvtLocalReachabilityChanged)
-		if !ok {
-			t.Fatal("got wrong event type from the bus")
-		}
-
-		if evt.Reachability != network.ReachabilityPrivate {
-			t.Fatalf("received incorrect reachability event %v", evt)
-		}
-
-	case <-time.After(1 * time.Second):
-		t.Fatal("failed to get the EvtLocalReachabilityChanged event from the bus")
-	}
+	expectEvent(t, s, network.ReachabilityPrivate)
 }
 
 func TestAutoNATPublic(t *testing.T) {
@@ -156,20 +156,7 @@ func TestAutoNATPublic(t *testing.T) {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
 
-	select {
-	case e := <-s.Out():
-		evt, ok := e.(event.EvtLocalReachabilityChanged)
-		if !ok {
-			t.Fatal("got wrong event type from the bus")
-		}
-
-		if evt.Reachability != network.ReachabilityPublic {
-			t.Fatalf("received incorrect reachability event %v", evt)
-		}
-
-	case <-time.After(1 * time.Second):
-		t.Fatal("failed to get the EvtLocalReachabilityChanged event from the bus")
-	}
+	expectEvent(t, s, network.ReachabilityPublic)
 }
 
 func TestAutoNATPublictoPrivate(t *testing.T) {
@@ -198,16 +185,7 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
 
-	select {
-	case e := <-s.Out():
-		ev, ok := e.(event.EvtLocalReachabilityChanged)
-		if !ok || ev.Reachability != network.ReachabilityPublic {
-			t.Fatal("got wrong event type from the bus")
-		}
-
-	case <-time.After(1 * time.Second):
-		t.Fatal("failed to get the reachability event from the bus")
-	}
+	expectEvent(t, s, network.ReachabilityPublic)
 
 	hs.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
 	time.Sleep(2 * time.Second)
@@ -216,4 +194,62 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	if status != network.ReachabilityPrivate {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
+}
+
+func TestAutoNATObservationRecording(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := makeAutoNATServicePublic(ctx, t)
+	hc, ani := makeAutoNAT(ctx, t, hs)
+	an := ani.(*AmbientAutoNAT)
+
+	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
+	if err != nil {
+		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
+	}
+
+	// pubic observation without address should be ignored.
+	an.recordObservation(autoNATResult{network.ReachabilityPublic, nil})
+	if an.Status() != network.ReachabilityUnknown {
+		t.Fatalf("unexpected transition")
+	}
+
+	select {
+	case _ = <-s.Out():
+		t.Fatal("not expecting a public reachability event")
+	default:
+		//expected
+	}
+
+	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234")
+	an.recordObservation(autoNATResult{network.ReachabilityPublic, addr})
+	if an.Status() != network.ReachabilityPublic {
+		t.Fatalf("failed to transition to public.")
+	}
+
+	expectEvent(t, s, network.ReachabilityPublic)
+
+	// a single recording should have confidence still at 0, and transition to private quickly.
+	an.recordObservation(autoNATResult{network.ReachabilityPrivate, nil})
+	if an.Status() != network.ReachabilityPrivate {
+		t.Fatalf("failed to transition to private.")
+	}
+
+	expectEvent(t, s, network.ReachabilityPrivate)
+
+	// stronger public confidence should be harder to undo.
+	an.recordObservation(autoNATResult{network.ReachabilityPublic, addr})
+	an.recordObservation(autoNATResult{network.ReachabilityPublic, addr})
+	if an.Status() != network.ReachabilityPublic {
+		t.Fatalf("failed to transition to public.")
+	}
+
+	expectEvent(t, s, network.ReachabilityPublic)
+
+	an.recordObservation(autoNATResult{network.ReachabilityPrivate, nil})
+	if an.Status() != network.ReachabilityPublic {
+		t.Fatalf("too-extreme private transition.")
+	}
+
 }
