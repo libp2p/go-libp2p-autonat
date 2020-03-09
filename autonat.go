@@ -11,7 +11,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
 
 	"github.com/libp2p/go-eventbus"
 	ma "github.com/multiformats/go-multiaddr"
@@ -128,8 +127,12 @@ func (as *AmbientAutoNAT) background() {
 		select {
 		// new connection occured.
 		case conn := <-as.candidatePeers:
-			if conn.Stat().Direction == network.DirInbound && manet.IsPublicAddr(conn.RemoteMultiaddr()) {
-				as.lastInbound = time.Now()
+			if conn.Stat().Direction == network.DirInbound &&
+				manet.IsPublicAddr(conn.RemoteMultiaddr()) {
+				ca := as.status.Load().(autoNATResult)
+				if !ca.address.Equal(conn.RemoteMultiaddr()) {
+					as.lastInbound = time.Now()
+				}
 			}
 
 		case <-addrUpdatedChan:
@@ -241,7 +244,6 @@ func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
 	ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
 	defer cancel()
 
-	as.host.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.TempAddrTTL)
 	a, err := cli.DialBack(ctx, pi.ID)
 
 	switch {
