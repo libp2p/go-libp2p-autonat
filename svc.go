@@ -27,12 +27,23 @@ import (
 const P_CIRCUIT = 290
 
 var (
-	AutoNATServiceDialTimeout   = 15 * time.Second
+	// AutoNATServiceDialTimeout defines how long to wait for connection
+	// attempts before failing.
+	AutoNATServiceDialTimeout = 15 * time.Second
+	// AutoNATServiceResetInterval defines how often to reset throttling.
 	AutoNATServiceResetInterval = 1 * time.Minute
-	AutoNATServiceResetJitter   = 15 * time.Second
+	// AutoNATServiceResetJitter defines the amplitude of randomness in throttle
+	// reset timing.
+	AutoNATServiceResetJitter = 15 * time.Second
 
-	AutoNATServiceThrottle  = 3
-	AutoNATGlobalThrottle   = 30
+	// AutoNATServiceThrottle defines how many times each ResetInterval a peer
+	// can ask for its autonat address.
+	AutoNATServiceThrottle = 3
+	// AutoNATGlobalThrottle defines how many total autonat requests this
+	// service will answer each ResetInterval.
+	AutoNATGlobalThrottle = 30
+	// AutoNATMaxPeerAddresses defines maximum number of addreses the autonat
+	// service will consider when attempting to connect to the peer.
 	AutoNATMaxPeerAddresses = 16
 )
 

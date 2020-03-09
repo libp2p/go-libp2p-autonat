@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
 	autonat "github.com/libp2p/go-libp2p-autonat"
@@ -137,6 +139,55 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	AutoNATServiceResetJitter = save5
 }
 
+func TestAutoNATServiceGlobalLimiter(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	save1 := AutoNATServiceDialTimeout
+	AutoNATServiceDialTimeout = 1 * time.Second
+	save2 := AutoNATServiceResetInterval
+	AutoNATServiceResetInterval = 10 * time.Second
+	save3 := AutoNATServiceThrottle
+	AutoNATServiceThrottle = 1
+	save4 := manet.Private4
+	manet.Private4 = []*net.IPNet{}
+	save5 := AutoNATServiceResetJitter
+	AutoNATServiceResetJitter = 0 * time.Second
+	save6 := AutoNATGlobalThrottle
+	AutoNATGlobalThrottle = 5
+
+	hs, as := makeAutoNATService(ctx, t)
+	as.globalReqMax = 5
+
+	for i := 0; i < 5; i++ {
+		hc, ac := makeAutoNATClient(ctx, t)
+		connect(t, hs, hc)
+
+		_, err := ac.DialBack(ctx, hs.ID())
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	hc, ac := makeAutoNATClient(ctx, t)
+	connect(t, hs, hc)
+	_, err := ac.DialBack(ctx, hs.ID())
+	if err == nil {
+		t.Fatal("Dial back succeeded unexpectedly!")
+	}
+
+	if !autonat.IsDialRefused(err) {
+		t.Fatal(err)
+	}
+
+	AutoNATServiceDialTimeout = save1
+	AutoNATServiceResetInterval = save2
+	AutoNATServiceThrottle = save3
+	manet.Private4 = save4
+	AutoNATServiceResetJitter = save5
+	AutoNATGlobalThrottle = save6
+}
+
 func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -161,6 +212,48 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 
 	AutoNATServiceResetInterval = save1
 	AutoNATServiceResetJitter = save2
+}
+
+func TestAutoNATServiceStartup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	save := manet.Private4
+	manet.Private4 = []*net.IPNet{}
+
+	h, err := libp2p.New(ctx, libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = NewAutoNATService(ctx, h, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	eb, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged))
+
+	hc, ac := makeAutoNATClient(ctx, t)
+	connect(t, h, hc)
+
+	_, err = ac.DialBack(ctx, h.ID())
+	if err == nil {
+		t.Fatal("autonat should not be started / advertising.")
+	}
+
+	eb.Emit(event.EvtLocalReachabilityChanged{Reachability: network.ReachabilityPublic})
+	_, err = ac.DialBack(ctx, h.ID())
+	if err != nil {
+		t.Fatalf("autonat should be active, was %v", err)
+	}
+
+	eb.Emit(event.EvtLocalReachabilityChanged{Reachability: network.ReachabilityPrivate})
+	_, err = ac.DialBack(ctx, h.ID())
+	if err == nil {
+		t.Fatal("autonat should not be started / advertising.")
+	}
+
+	manet.Private4 = save
 }
 
 func TestAddrToIP(t *testing.T) {
