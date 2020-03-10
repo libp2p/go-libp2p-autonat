@@ -13,7 +13,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 
 	autonat "github.com/libp2p/go-libp2p-autonat"
-	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
@@ -254,26 +253,4 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	}
 
 	manet.Private4 = save
-}
-
-func TestAddrToIP(t *testing.T) {
-	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/0")
-	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.IPv4(127, 0, 0, 1)) {
-		t.Fatal("addrToIP of ipv4 localhost incorrect!")
-	}
-
-	addr, _ = ma.NewMultiaddr("/ip4/192.168.0.1/tcp/6")
-	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.IPv4(192, 168, 0, 1)) {
-		t.Fatal("addrToIP of ipv4 incorrect!")
-	}
-
-	addr, _ = ma.NewMultiaddr("/ip6zone/eth0/ip6/fe80::1")
-	if ip, err := addrToIP(addr); err != nil || !ip.Equal(net.ParseIP("fe80::1")) {
-		t.Fatal("addrToIP of ip6zone incorrect!")
-	}
-
-	addr, _ = ma.NewMultiaddr("/unix/a/b/c/d")
-	if _, err := addrToIP(addr); err == nil {
-		t.Fatal("invalid addrToIP populates")
-	}
 }

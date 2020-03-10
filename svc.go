@@ -2,7 +2,6 @@ package autonat
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -125,26 +124,6 @@ func (as *AutoNATService) handleStream(s network.Stream) {
 	}
 }
 
-// Optimistically extract the net.IP host from a multiaddress.
-// TODO: use upstream manet.ToIP
-func addrToIP(addr ma.Multiaddr) (net.IP, error) {
-	n, err := manet.ToNetAddr(addr)
-	if err != nil {
-		return nil, err
-	}
-
-	switch netAddr := n.(type) {
-	case *net.UDPAddr:
-		return netAddr.IP, nil
-	case *net.TCPAddr:
-		return netAddr.IP, nil
-	case *net.IPAddr:
-		return netAddr.IP, nil
-	default:
-		return nil, fmt.Errorf("non IP Multiaddr: %T", netAddr)
-	}
-}
-
 func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Message_PeerInfo) *pb.Message_DialResponse {
 	if mpi == nil {
 		return newDialResponseError(pb.Message_E_BAD_REQUEST, "missing peer info")
@@ -170,7 +149,7 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 	if !as.skipDial(obsaddr) {
 		addrs = append(addrs, obsaddr)
 		seen[obsaddr.String()] = struct{}{}
-		obsHost, _ = addrToIP(obsaddr)
+		obsHost, _ = manet.ToIP(obsaddr)
 	}
 
 	for _, maddr := range mpi.GetAddrs() {
@@ -184,7 +163,7 @@ func (as *AutoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if ip, err := addrToIP(addr); err != nil || !obsHost.Equal(ip) {
+		if ip, err := manet.ToIP(addr); err != nil || !obsHost.Equal(ip) {
 			continue
 		}
 
