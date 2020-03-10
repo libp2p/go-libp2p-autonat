@@ -287,8 +287,7 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 		return
 	}
 
-	connected := make([]peer.AddrInfo, 0, len(peers))
-	others := make([]peer.AddrInfo, 0, len(peers))
+	addrs := make([]peer.AddrInfo, 0, len(peers))
 
 	for _, p := range peers {
 		info := as.host.Peerstore().PeerInfo(p)
@@ -296,25 +295,14 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 		if proto, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto); len(proto) == 0 || err != nil {
 			continue
 		}
-		if as.host.Network().Connectedness(p) == network.Connected {
-			connected = append(connected, info)
-		} else {
-			others = append(others, info)
-		}
+		addrs = append(addrs, info)
 	}
 	// TODO: track and exclude recently probed peers.
 
-	shufflePeers(connected)
+	shufflePeers(addrs)
 
-	if len(connected) > 0 {
-		as.lastProbe = time.Now()
-		as.probe(&connected[0])
-		return
-	} else if len(others) > 0 {
-		shufflePeers(others)
-		as.lastProbe = time.Now()
-		as.probe(&others[0])
-	}
+	as.lastProbe = time.Now()
+	as.probe(&addrs[0])
 }
 
 func shufflePeers(peers []peer.AddrInfo) {
