@@ -129,6 +129,7 @@ func (as *AmbientAutoNAT) background() {
 	// before starting autodetection
 	delay := AutoNATBootDelay
 
+	var lastAddrUpdated time.Time
 	addrUpdatedChan := as.subAddrUpdated.Out()
 	defer as.subAddrUpdated.Close()
 	defer as.emitReachabilityChanged.Close()
@@ -150,8 +151,11 @@ func (as *AmbientAutoNAT) background() {
 			}
 
 		case <-addrUpdatedChan:
-			if as.confidence > 1 {
-				as.confidence--
+			if !lastAddrUpdated.Add(time.Second).After(time.Now()) {
+				lastAddrUpdated = time.Now()
+				if as.confidence > 1 {
+					as.confidence--
+				}
 			}
 
 		// probe finished.
