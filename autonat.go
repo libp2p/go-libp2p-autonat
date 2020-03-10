@@ -40,8 +40,8 @@ type AmbientAutoNAT struct {
 
 	getAddrs GetAddrs
 
-	candidatePeers chan network.Conn
-	observations   chan autoNATResult
+	inboundConn  chan network.Conn
+	observations chan autoNATResult
 	// status is an autoNATResult reflecting current status.
 	status atomic.Value
 	// Reflects the confidence on of the NATStatus being private, as a single
@@ -75,11 +75,11 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
-		ctx:            ctx,
-		host:           h,
-		getAddrs:       getAddrs,
-		candidatePeers: make(chan network.Conn, 5),
-		observations:   make(chan autoNATResult, 1),
+		ctx:          ctx,
+		host:         h,
+		getAddrs:     getAddrs,
+		inboundConn:  make(chan network.Conn, 5),
+		observations: make(chan autoNATResult, 1),
 
 		subAddrUpdated: subAddrUpdated,
 
@@ -114,6 +114,16 @@ func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 	return s.address, nil
 }
 
+func ipInList(candidate ma.Multiaddr, list []ma.Multiaddr) bool {
+	candidateIP, _ := manet.ToIP(candidate)
+	for _, i := range list {
+		if ip, err := manet.ToIP(i); err == nil && ip.Equal(candidateIP) {
+			return true
+		}
+	}
+	return false
+}
+
 func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
@@ -123,16 +133,20 @@ func (as *AmbientAutoNAT) background() {
 	defer as.subAddrUpdated.Close()
 	defer as.emitReachabilityChanged.Close()
 
+	timer := time.NewTimer(delay)
+	timerRunning := true
+
 	for {
 		select {
 		// new connection occured.
-		case conn := <-as.candidatePeers:
-			if conn.Stat().Direction == network.DirInbound &&
-				manet.IsPublicAddr(conn.RemoteMultiaddr()) {
-				ca := as.status.Load().(autoNATResult)
-				if !ca.address.Equal(conn.RemoteMultiaddr()) {
-					as.lastInbound = time.Now()
-				}
+		case conn := <-as.inboundConn:
+			localAddrs := as.host.Addrs()
+			ca := as.status.Load().(autoNATResult)
+			if ca.address != nil {
+				localAddrs = append(localAddrs, ca.address)
+			}
+			if !ipInList(conn.RemoteMultiaddr(), localAddrs) {
+				as.lastInbound = time.Now()
 			}
 
 		case <-addrUpdatedChan:
@@ -146,12 +160,17 @@ func (as *AmbientAutoNAT) background() {
 				return
 			}
 			as.recordObservation(result)
-		case <-time.After(delay):
+		case <-timer.C:
+			timerRunning = false
 		case <-as.ctx.Done():
 			return
 		}
 
-		delay = as.scheduleProbe()
+		if timerRunning && !timer.Stop() {
+			<-timer.C
+		}
+		timer.Reset(as.scheduleProbe())
+		timerRunning = true
 	}
 }
 
