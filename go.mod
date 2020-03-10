@@ -9,7 +9,7 @@ require (
 	github.com/libp2p/go-libp2p-peerstore v0.1.4 // indirect
 	github.com/libp2p/go-libp2p-swarm v0.2.2
 	github.com/multiformats/go-multiaddr v0.2.1
-	github.com/multiformats/go-multiaddr-net v0.1.3-0.20200226194632-201fa11a96d9
+	github.com/multiformats/go-multiaddr-net v0.1.3
 )
 
 go 1.12
