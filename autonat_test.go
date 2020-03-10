@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	AutoNATBootDelay = 1 * time.Second
+	AutoNATBootDelay = 100 * time.Millisecond
 	AutoNATRefreshInterval = 1 * time.Second
 	AutoNATRetryInterval = 1 * time.Second
 	AutoNATIdentifyDelay = 100 * time.Millisecond
@@ -149,7 +149,7 @@ func TestAutoNATPublic(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(1 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 
 	status = an.Status()
 	if status != network.ReachabilityPublic {
@@ -178,7 +178,7 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(1 * time.Second)
+	time.Sleep(200 * time.Millisecond)
 
 	status = an.Status()
 	if status != network.ReachabilityPublic {
