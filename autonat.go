@@ -301,6 +301,10 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 	}
 	// TODO: track and exclude recently probed peers.
 
+	if len(addrs) == 0 {
+		return
+	}
+
 	shufflePeers(addrs)
 
 	as.lastProbe = time.Now()
