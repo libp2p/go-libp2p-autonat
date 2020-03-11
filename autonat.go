@@ -135,6 +135,7 @@ func (as *AmbientAutoNAT) background() {
 	defer as.emitReachabilityChanged.Close()
 
 	timer := time.NewTimer(delay)
+	defer timer.Stop()
 	timerRunning := true
 
 	for {
@@ -170,6 +171,7 @@ func (as *AmbientAutoNAT) background() {
 			return
 		}
 
+		// Drain the timer channel if it hasn't fired in preparation for Resetting it.
 		if timerRunning && !timer.Stop() {
 			<-timer.C
 		}
