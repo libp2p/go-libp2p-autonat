@@ -1,8 +1,6 @@
 package autonat
 
 import (
-	"time"
-
 	"github.com/libp2p/go-libp2p-core/network"
 
 	ma "github.com/multiformats/go-multiaddr"
@@ -10,8 +8,6 @@ import (
 )
 
 var _ network.Notifiee = (*AmbientAutoNAT)(nil)
-
-var AutoNATIdentifyDelay = 5 * time.Second
 
 func (as *AmbientAutoNAT) Listen(net network.Network, a ma.Multiaddr)         {}
 func (as *AmbientAutoNAT) ListenClose(net network.Network, a ma.Multiaddr)    {}

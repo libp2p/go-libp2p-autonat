@@ -14,25 +14,15 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-// AutoNATClient is a stateless client interface to AutoNAT peers
-type AutoNATClient interface {
-	// DialBack requests from a peer providing AutoNAT services to test dial back
-	// and report the address on a successful connection.
-	DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
-}
-
 // AutoNATError is the class of errors signalled by AutoNAT services
 type AutoNATError struct {
 	Status pb.Message_ResponseStatus
 	Text   string
 }
 
-// GetAddrs is a function that returns the addresses to dial back
-type GetAddrs func() []ma.Multiaddr
-
 // NewAutoNATClient creates a fresh instance of an AutoNATClient
 // If getAddrs is nil, h.Addrs will be used
-func NewAutoNATClient(h host.Host, getAddrs GetAddrs) AutoNATClient {
+func NewAutoNATClient(h host.Host, getAddrs GetAddrs) Client {
 	if getAddrs == nil {
 		getAddrs = h.Addrs
 	}
