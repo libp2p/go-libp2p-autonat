@@ -1,6 +1,7 @@
 package autonat
 
 import (
+	"errors"
 	"time"
 )
 
@@ -28,6 +29,9 @@ var defaults = func(c *config) error {
 // to externally advertise or verify connectability on.
 func WithAddresses(addrFunc GetAddrs) Option {
 	return func(c *config) error {
+		if addrFunc == nil {
+			return errors.New("invalid address function supplied")
+		}
 		c.getAddressFunc = addrFunc
 		return nil
 	}
