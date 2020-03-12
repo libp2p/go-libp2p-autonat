@@ -7,15 +7,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-eventbus"
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	"github.com/libp2p/go-eventbus"
+	logging "github.com/ipfs/go-log"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
 )
+
+var log = logging.Logger("autonat")
 
 // AmbientAutoNAT is the implementation of ambient NAT autodiscovery
 type AmbientAutoNAT struct {
@@ -38,6 +41,8 @@ type AmbientAutoNAT struct {
 	lastProbe   time.Time
 
 	subAddrUpdated event.Subscription
+	service        *autoNATService
+	serviceCancel  context.CancelFunc
 
 	emitReachabilityChanged event.Emitter
 }
@@ -50,12 +55,13 @@ type autoNATResult struct {
 // New creates a new NAT autodiscovery system attached to a host
 func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	conf := new(config)
+	conf.host = h
 
 	if err := defaults(conf); err != nil {
 		return nil, err
 	}
-	if conf.getAddressFunc == nil {
-		conf.getAddressFunc = h.Addrs
+	if conf.addressFunc == nil {
+		conf.addressFunc = h.Addrs
 	}
 
 	for _, o := range options {
@@ -82,6 +88,14 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 
 	h.Network().Notify(as)
 	go as.background()
+
+	if conf.dialer != nil {
+		var err error
+		as.service, err = newAutoNATService(ctx, conf)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return as, nil
 }
@@ -211,6 +225,11 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		if currentStatus.Reachability != network.ReachabilityPublic {
 			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
+			if as.service != nil && !as.config.forceServer {
+				ctx, cancel := context.WithCancel(as.ctx)
+				go as.service.Enable(ctx)
+				as.serviceCancel = cancel
+			}
 			changed = true
 		} else if as.confidence < 3 {
 			as.confidence++
@@ -236,6 +255,10 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 				// we are flipping our NATStatus, so confidence drops to 0
 				as.confidence = 0
 				as.status.Store(observation)
+				if as.serviceCancel != nil {
+					as.serviceCancel()
+					as.serviceCancel = nil
+				}
 				as.emitStatus()
 			}
 		} else if as.confidence < 3 {
@@ -252,13 +275,17 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		log.Debugf("NAT status is unknown")
 		as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 		if currentStatus.Reachability != network.ReachabilityUnknown {
+			if as.serviceCancel != nil {
+				as.serviceCancel()
+				as.serviceCancel = nil
+			}
 			as.emitStatus()
 		}
 	}
 }
 
 func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
-	cli := NewAutoNATClient(as.host, as.config.getAddressFunc)
+	cli := NewAutoNATClient(as.host, as.config.addressFunc)
 	ctx, cancel := context.WithTimeout(as.ctx, as.config.requestTimeout)
 	defer cancel()
 

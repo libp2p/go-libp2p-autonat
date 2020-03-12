@@ -5,13 +5,10 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	logging "github.com/ipfs/go-log"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
 const AutoNATProto = "/libp2p/autonat/1.0.0"
-
-var log = logging.Logger("autonat")
 
 func newDialMessage(pi peer.AddrInfo) *pb.Message {
 	msg := new(pb.Message)
@@ -25,7 +22,7 @@ func newDialMessage(pi peer.AddrInfo) *pb.Message {
 	}
 
 	return msg
-)
+}
 
 func newDialResponseOK(addr ma.Multiaddr) *pb.Message_DialResponse {
 	dr := new(pb.Message_DialResponse)

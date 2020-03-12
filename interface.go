@@ -25,8 +25,8 @@ type Client interface {
 	DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
 }
 
-// GetAddrs is a function returning the candidate addresses for the local host.
-type GetAddrs func() []ma.Multiaddr
+// AddrFunc is a function returning the candidate addresses for the local host.
+type AddrFunc func() []ma.Multiaddr
 
 // Option is an Autonat option for configuration
 type Option func(*config) error
