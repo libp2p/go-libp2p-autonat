@@ -17,28 +17,12 @@ import (
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
-var (
-	AutoNATBootDelay       = 15 * time.Second
-	AutoNATRetryInterval   = 90 * time.Second
-	AutoNATRefreshInterval = 15 * time.Minute
-	AutoNATRequestTimeout  = 30 * time.Second
-)
-
-// AutoNAT is the interface for ambient NAT autodiscovery
-type AutoNAT interface {
-	// Status returns the current NAT status
-	Status() network.Reachability
-	// PublicAddr returns the public dial address when NAT status is public and an
-	// error otherwise
-	PublicAddr() (ma.Multiaddr, error)
-}
-
 // AmbientAutoNAT is the implementation of ambient NAT autodiscovery
 type AmbientAutoNAT struct {
 	ctx  context.Context
 	host host.Host
 
-	getAddrs GetAddrs
+	*config
 
 	inboundConn  chan network.Conn
 	observations chan autoNATResult
@@ -63,21 +47,30 @@ type autoNATResult struct {
 	address ma.Multiaddr
 }
 
-// NewAutoNAT creates a new ambient NAT autodiscovery instance attached to a host
-// If getAddrs is nil, h.Addrs will be used
-func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
-	if getAddrs == nil {
-		getAddrs = h.Addrs
+// New creates a new NAT autodiscovery system attached to a host
+func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
+	conf := new(config)
+
+	if err := defaults(conf); err != nil {
+		return nil, err
+	}
+	if conf.getAddressFunc == nil {
+		conf.getAddressFunc = h.Addrs
+	}
+
+	for _, o := range options {
+		if err := o(conf); err != nil {
+			return nil, err
+		}
 	}
 
 	subAddrUpdated, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
-
 	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:          ctx,
 		host:         h,
-		getAddrs:     getAddrs,
+		config:       conf,
 		inboundConn:  make(chan network.Conn, 5),
 		observations: make(chan autoNATResult, 1),
 
@@ -90,7 +83,7 @@ func NewAutoNAT(ctx context.Context, h host.Host, getAddrs GetAddrs) AutoNAT {
 	h.Network().Notify(as)
 	go as.background()
 
-	return as
+	return as, nil
 }
 
 // Status returns the AutoNAT observed reachability status.
@@ -127,7 +120,7 @@ func ipInList(candidate ma.Multiaddr, list []ma.Multiaddr) bool {
 func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
-	delay := AutoNATBootDelay
+	delay := as.config.bootDelay
 
 	var lastAddrUpdated time.Time
 	addrUpdatedChan := as.subAddrUpdated.Out()
@@ -192,11 +185,11 @@ func (as *AmbientAutoNAT) scheduleProbe() time.Duration {
 
 	nextProbe := fixedNow
 	if !as.lastProbe.IsZero() {
-		untilNext := AutoNATRefreshInterval
+		untilNext := as.config.refreshInterval
 		if currentStatus.Reachability == network.ReachabilityUnknown {
-			untilNext = AutoNATRetryInterval
+			untilNext = as.config.retryInterval
 		} else if as.confidence < 3 {
-			untilNext = AutoNATRetryInterval
+			untilNext = as.config.retryInterval
 		} else if currentStatus.Reachability == network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
 			untilNext *= 2
 		}
@@ -204,7 +197,7 @@ func (as *AmbientAutoNAT) scheduleProbe() time.Duration {
 	}
 	if fixedNow.After(nextProbe) || fixedNow == nextProbe {
 		go as.probeNextPeer()
-		return AutoNATRetryInterval
+		return as.config.retryInterval
 	}
 	return nextProbe.Sub(fixedNow)
 }
@@ -265,8 +258,8 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 }
 
 func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
-	cli := NewAutoNATClient(as.host, as.getAddrs)
-	ctx, cancel := context.WithTimeout(as.ctx, AutoNATRequestTimeout)
+	cli := NewAutoNATClient(as.host, as.config.getAddressFunc)
+	ctx, cancel := context.WithTimeout(as.ctx, as.config.requestTimeout)
 	defer cancel()
 
 	a, err := cli.DialBack(ctx, pi.ID)

@@ -17,13 +17,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-func init() {
-	AutoNATBootDelay = 100 * time.Millisecond
-	AutoNATRefreshInterval = 1 * time.Second
-	AutoNATRetryInterval = 1 * time.Second
-	AutoNATIdentifyDelay = 100 * time.Millisecond
-}
-
 // these are mock service implementations for testing
 func makeAutoNATServicePrivate(ctx context.Context, t *testing.T) host.Host {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
@@ -75,7 +68,7 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
-	a := NewAutoNAT(ctx, h, nil)
+	a, _ := New(ctx, h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
 	return h, a
 }
 
