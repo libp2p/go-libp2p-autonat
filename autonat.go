@@ -47,6 +47,13 @@ type AmbientAutoNAT struct {
 	emitReachabilityChanged event.Emitter
 }
 
+type StaticAutoNAT struct {
+	ctx          context.Context
+	host         host.Host
+	reachability network.Reachability
+	service      *autoNATService
+}
+
 type autoNATResult struct {
 	network.Reachability
 	address ma.Multiaddr
@@ -54,10 +61,11 @@ type autoNATResult struct {
 
 // New creates a new NAT autodiscovery system attached to a host
 func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
+	var err error
 	conf := new(config)
 	conf.host = h
 
-	if err := defaults(conf); err != nil {
+	if err = defaults(conf); err != nil {
 		return nil, err
 	}
 	if conf.addressFunc == nil {
@@ -65,13 +73,31 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	}
 
 	for _, o := range options {
-		if err := o(conf); err != nil {
+		if err = o(conf); err != nil {
+			return nil, err
+		}
+	}
+	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
+
+	var service *autoNATService
+	if (!conf.forceReachability || conf.reachability == network.ReachabilityPublic) && conf.dialer != nil {
+		service, err = newAutoNATService(ctx, conf)
+		if err != nil {
 			return nil, err
 		}
 	}
 
+	if conf.forceReachability {
+		emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: conf.reachability})
+		return &StaticAutoNAT{
+			ctx:          ctx,
+			host:         h,
+			reachability: conf.reachability,
+			service:      service,
+		}, nil
+	}
+
 	subAddrUpdated, _ := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
-	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	as := &AmbientAutoNAT{
 		ctx:          ctx,
@@ -83,19 +109,12 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 		subAddrUpdated: subAddrUpdated,
 
 		emitReachabilityChanged: emitReachabilityChanged,
+		service:                 service,
 	}
 	as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 
 	h.Network().Notify(as)
 	go as.background()
-
-	if conf.dialer != nil {
-		var err error
-		as.service, err = newAutoNATService(ctx, conf)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	return as, nil
 }
@@ -115,7 +134,7 @@ func (as *AmbientAutoNAT) emitStatus() {
 func (as *AmbientAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 	s := as.status.Load().(autoNATResult)
 	if s.Reachability != network.ReachabilityPublic {
-		return nil, errors.New("NAT Status is not public")
+		return nil, errors.New("NAT status is not public")
 	}
 
 	return s.address, nil
@@ -225,7 +244,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		if currentStatus.Reachability != network.ReachabilityPublic {
 			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
-			if as.service != nil && !as.config.forceServer {
+			if as.service != nil {
 				ctx, cancel := context.WithCancel(as.ctx)
 				go as.service.Enable(ctx)
 				as.serviceCancel = cancel
@@ -336,4 +355,19 @@ func shufflePeers(peers []peer.AddrInfo) {
 		j := rand.Intn(i + 1)
 		peers[i], peers[j] = peers[j], peers[i]
 	}
+}
+
+func (s *StaticAutoNAT) Status() network.Reachability {
+	return s.reachability
+}
+
+func (s *StaticAutoNAT) PublicAddr() (ma.Multiaddr, error) {
+	if s.reachability != network.ReachabilityPublic {
+		return nil, errors.New("NAT status is not public")
+	}
+	addrs := s.host.Addrs()
+	if len(addrs) > 0 {
+		return s.host.Addrs()[0], nil
+	}
+	return nil, errors.New("No available address")
 }

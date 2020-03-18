@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p-core/helpers"
@@ -29,6 +30,7 @@ type autoNATService struct {
 	config *config
 
 	// rate limiter
+	running    uint32
 	mx         sync.Mutex
 	reqs       map[peer.ID]int
 	globalReqs int
@@ -46,7 +48,7 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 		reqs:   make(map[peer.ID]int),
 	}
 
-	if c.forceServer {
+	if c.forceReachability {
 		go as.Enable(ctx)
 	}
 
@@ -212,6 +214,14 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 
 // Enable the autoNAT service temporarily until the associated context is canceled.
 func (as *autoNATService) Enable(ctx context.Context) {
+	alreadyRunning := atomic.SwapUint32(&as.running, 1)
+	if alreadyRunning > 0 {
+		return
+	}
+	defer func() {
+		atomic.StoreUint32(&as.running, 0)
+	}()
+
 	as.config.host.SetStreamHandler(AutoNATProto, as.handleStream)
 
 	timer := time.NewTimer(as.config.throttleResetPeriod)
