@@ -50,20 +50,6 @@ func sayAutoNATPublic(s network.Stream) {
 	w.WriteMsg(&res)
 }
 
-func newDialResponseOK(addr ma.Multiaddr) *pb.Message_DialResponse {
-	dr := new(pb.Message_DialResponse)
-	dr.Status = pb.Message_OK.Enum()
-	dr.Addr = addr.Bytes()
-	return dr
-}
-
-func newDialResponseError(status pb.Message_ResponseStatus, text string) *pb.Message_DialResponse {
-	dr := new(pb.Message_DialResponse)
-	dr.Status = status.Enum()
-	dr.StatusText = &text
-	return dr
-}
-
 func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, AutoNAT) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
