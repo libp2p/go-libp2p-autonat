@@ -88,6 +88,11 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 
 	if conf.forceReachability {
 		emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: conf.reachability})
+
+		// The serice will only exist when reachability is public.
+		if service != nil {
+			service.Enable()
+		}
 		return &StaticAutoNAT{
 			ctx:          ctx,
 			host:         h,

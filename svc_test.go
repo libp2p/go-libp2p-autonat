@@ -30,6 +30,7 @@ func makeAutoNATService(ctx context.Context, t *testing.T, c *config) *autoNATSe
 	if err != nil {
 		t.Fatal(err)
 	}
+	as.Enable()
 
 	return as
 }

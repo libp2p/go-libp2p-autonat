@@ -49,10 +49,6 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 		reqs:   make(map[peer.ID]int),
 	}
 
-	if c.forceReachability {
-		as.Enable()
-	}
-
 	return as, nil
 }
 
