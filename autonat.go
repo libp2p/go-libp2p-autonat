@@ -42,7 +42,6 @@ type AmbientAutoNAT struct {
 
 	subAddrUpdated event.Subscription
 	service        *autoNATService
-	serviceCancel  context.CancelFunc
 
 	emitReachabilityChanged event.Emitter
 }
@@ -245,9 +244,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 			// we are flipping our NATStatus, so confidence drops to 0
 			as.confidence = 0
 			if as.service != nil {
-				ctx, cancel := context.WithCancel(as.ctx)
-				go as.service.Enable(ctx)
-				as.serviceCancel = cancel
+				as.service.Enable()
 			}
 			changed = true
 		} else if as.confidence < 3 {
@@ -274,9 +271,8 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 				// we are flipping our NATStatus, so confidence drops to 0
 				as.confidence = 0
 				as.status.Store(observation)
-				if as.serviceCancel != nil {
-					as.serviceCancel()
-					as.serviceCancel = nil
+				if as.service != nil {
+					as.service.Disable()
 				}
 				as.emitStatus()
 			}
@@ -294,9 +290,8 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		log.Debugf("NAT status is unknown")
 		as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 		if currentStatus.Reachability != network.ReachabilityUnknown {
-			if as.serviceCancel != nil {
-				as.serviceCancel()
-				as.serviceCancel = nil
+			if as.service != nil {
+				as.service.Disable()
 			}
 			as.emitStatus()
 		}
