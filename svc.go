@@ -24,11 +24,14 @@ const P_CIRCUIT = 290
 
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
-	ctx context.Context
+	ctx          context.Context
+	instance     context.CancelFunc
+	instanceLock sync.Mutex
 
 	config *config
 
 	// rate limiter
+	running    uint32
 	mx         sync.Mutex
 	reqs       map[peer.ID]int
 	globalReqs int
@@ -44,10 +47,6 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 		ctx:    ctx,
 		config: c,
 		reqs:   make(map[peer.ID]int),
-	}
-
-	if c.forceServer {
-		go as.Enable(ctx)
 	}
 
 	return as, nil
@@ -210,8 +209,30 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	return newDialResponseOK(ra)
 }
 
-// Enable the autoNAT service temporarily until the associated context is canceled.
-func (as *autoNATService) Enable(ctx context.Context) {
+// Enable the autoNAT service if it is not running.
+func (as *autoNATService) Enable() {
+	as.instanceLock.Lock()
+	defer as.instanceLock.Unlock()
+	if as.instance != nil {
+		return
+	}
+	inst, cncl := context.WithCancel(as.ctx)
+	as.instance = cncl
+
+	go as.background(inst)
+}
+
+// Disable the autoNAT service if it is running.
+func (as *autoNATService) Disable() {
+	as.instanceLock.Lock()
+	defer as.instanceLock.Unlock()
+	if as.instance != nil {
+		as.instance()
+		as.instance = nil
+	}
+}
+
+func (as *autoNATService) background(ctx context.Context) {
 	as.config.host.SetStreamHandler(AutoNATProto, as.handleStream)
 
 	timer := time.NewTimer(as.config.throttleResetPeriod)

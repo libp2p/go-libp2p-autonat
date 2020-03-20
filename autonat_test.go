@@ -232,3 +232,20 @@ func TestAutoNATObservationRecording(t *testing.T) {
 	}
 
 }
+
+func TestStaticNat(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	s, _ := h.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
+
+	nat, err := New(ctx, h, WithReachability(network.ReachabilityPrivate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nat.Status() != network.ReachabilityPrivate {
+		t.Fatalf("should be private")
+	}
+	expectEvent(t, s, network.ReachabilityPrivate)
+}

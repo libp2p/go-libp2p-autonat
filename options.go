@@ -12,9 +12,10 @@ import (
 type config struct {
 	host host.Host
 
-	addressFunc AddrFunc
-	dialer      network.Network
-	forceServer bool
+	addressFunc       AddrFunc
+	dialer            network.Network
+	forceReachability bool
+	reachability      network.Reachability
 
 	// client
 	bootDelay       time.Duration
@@ -52,13 +53,22 @@ var defaults = func(c *config) error {
 // make parallel connections, and as such will modify both the associated peerstore
 // and terminate connections of this dialer. The dialer provided
 // should be compatible (TCP/UDP) however with the transports of the libp2p network.
-func EnableService(dialer network.Network, forceServer bool) Option {
+func EnableService(dialer network.Network) Option {
 	return func(c *config) error {
 		if dialer == c.host.Network() || dialer.Peerstore() == c.host.Peerstore() {
 			return errors.New("dialer should not be that of the host")
 		}
 		c.dialer = dialer
-		c.forceServer = forceServer
+		return nil
+	}
+}
+
+// WithReachability overrides autonat to simply report an over-ridden reachability
+// status.
+func WithReachability(reachability network.Reachability) Option {
+	return func(c *config) error {
+		c.forceReachability = true
+		c.reachability = reachability
 		return nil
 	}
 }

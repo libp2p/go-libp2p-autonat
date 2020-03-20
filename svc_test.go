@@ -21,7 +21,7 @@ func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	c := config{host: h, dialer: dh.Network()}
 	_ = defaults(&c)
-	c.forceServer = true
+	c.forceReachability = true
 	return &c
 }
 
@@ -30,6 +30,7 @@ func makeAutoNATService(ctx context.Context, t *testing.T, c *config) *autoNATSe
 	if err != nil {
 		t.Fatal(err)
 	}
+	as.Enable()
 
 	return as
 }
@@ -195,7 +196,7 @@ func TestAutoNATServiceStartup(t *testing.T) {
 
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	an, err := New(ctx, h, EnableService(dh.Network(), false))
+	an, err := New(ctx, h, EnableService(dh.Network()))
 	if err != nil {
 		t.Fatal(err)
 	}
