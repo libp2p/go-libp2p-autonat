@@ -154,6 +154,32 @@ func ipInList(candidate ma.Multiaddr, list []ma.Multiaddr) bool {
 	return false
 }
 
+// skipDial indicates that a multiaddress isn't worth attempted dialing.
+// The same logic is used when the autonat client is considering if
+// a remote peer is worth using as a server, and when the server is
+// considering if a requested client is worth dialing back.
+func skipDial(h host.Host, addr ma.Multiaddr) bool {
+	// skip relay addresses
+	_, err := addr.ValueForProtocol(ma.P_CIRCUIT)
+	if err == nil {
+		return true
+	}
+
+	// skip private network (unroutable) addresses
+	if !manet.IsPublicAddr(addr) {
+		return true
+	}
+
+	// Skip dialing addresses we believe are the local node's
+	for _, localAddr := range h.Addrs() {
+		if localAddr.Equal(addr) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (as *AmbientAutoNAT) background() {
 	// wait a bit for the node to come online and establish some connections
 	// before starting autodetection
@@ -334,6 +360,15 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 		info := as.host.Peerstore().PeerInfo(p)
 		// Exclude peers which don't support the autonat protocol.
 		if proto, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto); len(proto) == 0 || err != nil {
+			continue
+		}
+		goodAddr := false
+		for _, a := range info.Addrs {
+			if !skipDial(as.host, a) {
+				goodAddr = true
+			}
+		}
+		if !goodAddr {
 			continue
 		}
 		addrs = append(addrs, info)
