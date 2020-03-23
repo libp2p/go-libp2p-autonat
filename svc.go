@@ -20,8 +20,6 @@ import (
 	manet "github.com/multiformats/go-multiaddr-net"
 )
 
-const P_CIRCUIT = 290
-
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
 	ctx          context.Context
@@ -112,7 +110,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 
 	// add observed addr to the list of addresses to dial
 	var obsHost net.IP
-	if !as.skipDial(obsaddr) {
+	if !as.config.skipDial(obsaddr) {
 		addrs = append(addrs, obsaddr)
 		seen[obsaddr.String()] = struct{}{}
 		obsHost, _ = manet.ToIP(obsaddr)
@@ -125,7 +123,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if as.skipDial(addr) {
+		if as.config.skipDial(addr) {
 			continue
 		}
 
@@ -152,28 +150,6 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 	}
 
 	return as.doDial(peer.AddrInfo{ID: p, Addrs: addrs})
-}
-
-func (as *autoNATService) skipDial(addr ma.Multiaddr) bool {
-	// skip relay addresses
-	_, err := addr.ValueForProtocol(P_CIRCUIT)
-	if err == nil {
-		return true
-	}
-
-	// skip private network (unroutable) addresses
-	if !manet.IsPublicAddr(addr) {
-		return true
-	}
-
-	// Skip dialing addresses we believe are the local node's
-	for _, localAddr := range as.config.host.Addrs() {
-		if localAddr.Equal(addr) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {

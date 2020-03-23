@@ -16,6 +16,8 @@ type config struct {
 	dialer            network.Network
 	forceReachability bool
 	reachability      network.Reachability
+	// Don't try to skip dials that might be within the lan
+	allowSelfDials bool
 
 	// client
 	bootDelay       time.Duration

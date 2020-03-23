@@ -2,7 +2,6 @@ package autonat
 
 import (
 	"context"
-	"net"
 	"testing"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
@@ -22,6 +20,7 @@ func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
 	c := config{host: h, dialer: dh.Network()}
 	_ = defaults(&c)
 	c.forceReachability = true
+	c.allowSelfDials = true
 	return &c
 }
 
@@ -48,6 +47,7 @@ func TestAutoNATServiceDialError(t *testing.T) {
 
 	c := makeAutoNATConfig(ctx, t)
 	c.dialTimeout = 1 * time.Second
+	c.allowSelfDials = false
 	_ = makeAutoNATService(ctx, t, c)
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
@@ -66,9 +66,6 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save := manet.Private4
-	manet.Private4 = []*net.IPNet{}
-
 	c := makeAutoNATConfig(ctx, t)
 	_ = makeAutoNATService(ctx, t, c)
 
@@ -79,16 +76,11 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial back failed: %s", err.Error())
 	}
-
-	manet.Private4 = save
 }
 
 func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	save1 := manet.Private4
-	manet.Private4 = []*net.IPNet{}
 
 	c := makeAutoNATConfig(ctx, t)
 	c.dialTimeout = 1 * time.Second
@@ -120,16 +112,11 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	manet.Private4 = save1
 }
 
 func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	save1 := manet.Private4
-	manet.Private4 = []*net.IPNet{}
 
 	c := makeAutoNATConfig(ctx, t)
 	c.dialTimeout = time.Second
@@ -161,8 +148,6 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	if !IsDialRefused(err) {
 		t.Fatal(err)
 	}
-
-	manet.Private4 = save1
 }
 
 func TestAutoNATServiceRateLimitJitter(t *testing.T) {
@@ -191,12 +176,10 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save := manet.Private4
-	manet.Private4 = []*net.IPNet{}
-
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	an, err := New(ctx, h, EnableService(dh.Network()))
+	an.(*AmbientAutoNAT).config.allowSelfDials = true
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,6 +206,4 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	if an.Status() != network.ReachabilityPublic {
 		t.Fatalf("autonat should report public, but didn't")
 	}
-
-	manet.Private4 = save
 }
