@@ -2,7 +2,6 @@ package autonat
 
 import (
 	"context"
-	"net"
 	"testing"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
 )
 
 // these are mock service implementations for testing
@@ -57,6 +55,7 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
 	a, _ := New(ctx, h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
+	a.(*AmbientAutoNAT).config.allowSelfDials = true
 	return h, a
 }
 
@@ -86,10 +85,6 @@ func TestAutoNATPrivate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	save := manet.Private4
-	manet.Private4 = []*net.IPNet{}
-	defer func() { manet.Private4 = save }()
-
 	hs := makeAutoNATServicePrivate(ctx, t)
 	hc, an := makeAutoNAT(ctx, t, hs)
 
@@ -113,15 +108,11 @@ func TestAutoNATPrivate(t *testing.T) {
 	}
 
 	expectEvent(t, s, network.ReachabilityPrivate)
-	cancel()
 }
 
 func TestAutoNATPublic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	save := manet.Private4
-	manet.Private4 = []*net.IPNet{}
 
 	hs := makeAutoNATServicePublic(ctx, t)
 	hc, an := makeAutoNAT(ctx, t, hs)
@@ -146,16 +137,11 @@ func TestAutoNATPublic(t *testing.T) {
 	}
 
 	expectEvent(t, s, network.ReachabilityPublic)
-	manet.Private4 = save
 }
 
 func TestAutoNATPublictoPrivate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	save := manet.Private4
-	manet.Private4 = []*net.IPNet{}
-	defer func() { manet.Private4 = save }()
 
 	hs := makeAutoNATServicePublic(ctx, t)
 	hc, an := makeAutoNAT(ctx, t, hs)
@@ -188,7 +174,6 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	if status != network.ReachabilityPrivate {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
-	cancel()
 }
 
 func TestAutoNATObservationRecording(t *testing.T) {
