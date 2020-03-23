@@ -374,10 +374,18 @@ func (as *AmbientAutoNAT) probeNextPeer() {
 		if proto, err := as.host.Peerstore().SupportsProtocols(p, AutoNATProto); len(proto) == 0 || err != nil {
 			continue
 		}
+
 		goodAddr := false
 		for _, a := range info.Addrs {
 			if !as.config.skipDial(a) {
 				goodAddr = true
+				// if a public IP of the peer is one of ours: skip the peer.
+				aIP, _ := manet.ToIP(a)
+				aHost, _ := manet.FromIP(aIP)
+				if len(manet.AddrMatch(aHost, as.host.Addrs())) > 0 {
+					goodAddr = false
+					break
+				}
 			}
 		}
 		if !goodAddr {
