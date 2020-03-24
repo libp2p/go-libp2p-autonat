@@ -55,7 +55,7 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
 	a, _ := New(ctx, h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
-	a.(*AmbientAutoNAT).config.allowSelfDials = true
+	a.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	return h, a
 }
 
