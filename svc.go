@@ -110,7 +110,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 
 	// add observed addr to the list of addresses to dial
 	var obsHost net.IP
-	if !as.config.skipDial(obsaddr) {
+	if !as.config.dialPolicy.skipDial(obsaddr) {
 		addrs = append(addrs, obsaddr)
 		seen[obsaddr.String()] = struct{}{}
 		obsHost, _ = manet.ToIP(obsaddr)
@@ -123,7 +123,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if as.config.skipDial(addr) {
+		if as.config.dialPolicy.skipDial(addr) {
 			continue
 		}
 

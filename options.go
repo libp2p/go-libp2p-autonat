@@ -13,11 +13,10 @@ type config struct {
 	host host.Host
 
 	addressFunc       AddrFunc
+	dialPolicy        dialPolicy
 	dialer            network.Network
 	forceReachability bool
 	reachability      network.Reachability
-	// Don't try to skip dials that might be within the lan
-	allowSelfDials bool
 
 	// client
 	bootDelay       time.Duration

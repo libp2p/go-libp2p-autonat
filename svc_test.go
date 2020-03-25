@@ -20,7 +20,7 @@ func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
 	c := config{host: h, dialer: dh.Network()}
 	_ = defaults(&c)
 	c.forceReachability = true
-	c.allowSelfDials = true
+	c.dialPolicy.allowSelfDials = true
 	return &c
 }
 
@@ -47,7 +47,7 @@ func TestAutoNATServiceDialError(t *testing.T) {
 
 	c := makeAutoNATConfig(ctx, t)
 	c.dialTimeout = 1 * time.Second
-	c.allowSelfDials = false
+	c.dialPolicy.allowSelfDials = false
 	_ = makeAutoNATService(ctx, t, c)
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
@@ -179,7 +179,7 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	an, err := New(ctx, h, EnableService(dh.Network()))
-	an.(*AmbientAutoNAT).config.allowSelfDials = true
+	an.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	if err != nil {
 		t.Fatal(err)
 	}
