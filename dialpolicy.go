@@ -1,6 +1,8 @@
 package autonat
 
 import (
+	"net"
+
 	"github.com/libp2p/go-libp2p-core/host"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr-net"
@@ -59,21 +61,45 @@ func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
 	for _, addr := range addrs {
 		if !d.skipDial(addr) {
 			goodAddr = true
-			// if a public IP of the peer is one of ours: skip the peer.
+			break
+		}
+	}
+
+	if !goodAddr {
+		return true
+	}
+
+	localAddrs := d.host.Addrs()
+	localHosts := make([]net.IP, 0)
+	for _, lAddr := range localAddrs {
+		if manet.IsPublicAddr(lAddr) {
+			lIP, err := manet.ToIP(lAddr)
+			if err != nil {
+				continue
+			}
+			localHosts = append(localHosts, lIP)
+		}
+	}
+
+	if len(localHosts) == 0 {
+		return false
+	}
+
+	// if a public IP of the peer is one of ours: skip the peer.
+	for _, addr := range addrs {
+		if manet.IsPublicAddr(addr) {
 			aIP, err := manet.ToIP(addr)
 			if err != nil {
 				continue
 			}
-			aHost, err := manet.FromIP(aIP)
-			if err != nil {
-				continue
-			}
-			// its public, but it matches on of our local addresses.
-			// disqualify the peer.
-			if len(manet.AddrMatch(aHost, d.host.Addrs())) > 0 {
-				return true
+
+			for _, lIP := range localHosts {
+				if lIP.Equal(aIP) {
+					return true
+				}
 			}
 		}
 	}
-	return !goodAddr
+
+	return false
 }

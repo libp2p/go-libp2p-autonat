@@ -108,4 +108,30 @@ func TestSkipPeer(t *testing.T) {
 	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/8.8.8.8"), makeMA("/ip4/9.9.9.9")}) != true {
 		t.Fatal("succeeded dialing host address when other public")
 	}
+	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/9.9.9.9")}) != false {
+		t.Fatal("succeeded dialing host address when other public")
+	}
+}
+
+func TestSkipLocalPeer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := swarmt.GenSwarm(t, ctx)
+	d := dialPolicy{host: blankhost.NewBlankHost(s)}
+	s.AddTransport(&mockT{ctx, makeMA("/ip4/192.168.0.1")})
+	err := s.AddListenAddr(makeMA("/ip4/192.168.0.1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/8.8.8.8")}) != false {
+		t.Fatal("failed dialing a valid public addr")
+	}
+	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/8.8.8.8"), makeMA("/ip4/192.168.0.1")}) != false {
+		t.Fatal("failed dialing a valid public addr")
+	}
+	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/192.168.0.1")}) != true {
+		t.Fatal("succeeded with no public addr")
+	}
 }
