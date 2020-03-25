@@ -14,8 +14,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-// AutoNATError is the class of errors signalled by AutoNAT services
-type AutoNATError struct {
+// Error wraps errors signalled by AutoNAT services
+type Error struct {
 	Status pb.Message_ResponseStatus
 	Text   string
 }
@@ -71,30 +71,32 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 		return ma.NewMultiaddrBytes(addr)
 
 	default:
-		return nil, AutoNATError{Status: status, Text: res.GetDialResponse().GetStatusText()}
+		return nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
 	}
 }
 
-func (e AutoNATError) Error() string {
+func (e Error) Error() string {
 	return fmt.Sprintf("AutoNAT error: %s (%s)", e.Text, e.Status.String())
 }
 
-func (e AutoNATError) IsDialError() bool {
+// IsDialError returns true if the error was due to a dial back failure
+func (e Error) IsDialError() bool {
 	return e.Status == pb.Message_E_DIAL_ERROR
 }
 
-func (e AutoNATError) IsDialRefused() bool {
+// IsDialRefused returns true if the error was due to a refusal to dial back
+func (e Error) IsDialRefused() bool {
 	return e.Status == pb.Message_E_DIAL_REFUSED
 }
 
 // IsDialError returns true if the AutoNAT peer signalled an error dialing back
 func IsDialError(e error) bool {
-	ae, ok := e.(AutoNATError)
+	ae, ok := e.(Error)
 	return ok && ae.IsDialError()
 }
 
 // IsDialRefused returns true if the AutoNAT peer signalled refusal to dial back
 func IsDialRefused(e error) bool {
-	ae, ok := e.(AutoNATError)
+	ae, ok := e.(Error)
 	return ok && ae.IsDialRefused()
 }

@@ -176,6 +176,30 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	}
 }
 
+func TestAutoNATIncomingEvents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	hs := makeAutoNATServicePrivate(ctx, t)
+	hc, ani := makeAutoNAT(ctx, t, hs)
+	an := ani.(*AmbientAutoNAT)
+
+	status := an.Status()
+	if status != network.ReachabilityUnknown {
+		t.Fatalf("unexpected NAT status: %d", status)
+	}
+
+	connect(t, hs, hc)
+
+	em, _ := hc.EventBus().Emitter(&event.EvtPeerIdentificationCompleted{})
+	em.Emit(event.EvtPeerIdentificationCompleted{Peer: hs.ID()})
+
+	time.Sleep(10 * time.Millisecond)
+	if an.Status() == network.ReachabilityUnknown {
+		t.Fatalf("Expected probe due to identification of autonat service")
+	}
+}
+
 func TestAutoNATObservationRecording(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
