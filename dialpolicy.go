@@ -60,7 +60,7 @@ func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
 	localAddrs := d.host.Addrs()
 	localHosts := make([]net.IP, 0)
 	for _, lAddr := range localAddrs {
-		if manet.IsPublicAddr(lAddr) {
+		if _, err := lAddr.ValueForProtocol(ma.P_CIRCUIT); err != nil && manet.IsPublicAddr(lAddr) {
 			lIP, err := manet.ToIP(lAddr)
 			if err != nil {
 				continue
@@ -72,7 +72,7 @@ func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
 	// if a public IP of the peer is one of ours: skip the peer.
 	goodPublic := false
 	for _, addr := range addrs {
-		if manet.IsPublicAddr(addr) {
+		if _, err := addr.ValueForProtocol(ma.P_CIRCUIT); err != nil && manet.IsPublicAddr(addr) {
 			aIP, err := manet.ToIP(addr)
 			if err != nil {
 				continue
