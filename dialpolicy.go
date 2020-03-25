@@ -57,18 +57,6 @@ func (d *dialPolicy) skipDial(addr ma.Multiaddr) bool {
 // factors, like the presence of the same public address as the local host,
 // that may make the peer undesirable to dial as a whole.
 func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
-	goodAddr := false
-	for _, addr := range addrs {
-		if !d.skipDial(addr) {
-			goodAddr = true
-			break
-		}
-	}
-
-	if !goodAddr {
-		return true
-	}
-
 	localAddrs := d.host.Addrs()
 	localHosts := make([]net.IP, 0)
 	for _, lAddr := range localAddrs {
@@ -81,11 +69,8 @@ func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
 		}
 	}
 
-	if len(localHosts) == 0 {
-		return false
-	}
-
 	// if a public IP of the peer is one of ours: skip the peer.
+	goodPublic := false
 	for _, addr := range addrs {
 		if manet.IsPublicAddr(addr) {
 			aIP, err := manet.ToIP(addr)
@@ -98,8 +83,13 @@ func (d *dialPolicy) skipPeer(addrs []ma.Multiaddr) bool {
 					return true
 				}
 			}
+			goodPublic = true
 		}
 	}
 
-	return false
+	if d.allowSelfDials {
+		return false
+	}
+
+	return !goodPublic
 }
