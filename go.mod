@@ -9,7 +9,7 @@ require (
 	github.com/libp2p/go-libp2p-core v0.5.0
 	github.com/libp2p/go-libp2p-swarm v0.2.2
 	github.com/multiformats/go-multiaddr v0.2.1
-	github.com/multiformats/go-multiaddr-net v0.1.3
+	github.com/multiformats/go-multiaddr-net v0.1.4
 )
 
 go 1.13
