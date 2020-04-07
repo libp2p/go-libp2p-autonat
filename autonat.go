@@ -46,6 +46,7 @@ type AmbientAutoNAT struct {
 	emitReachabilityChanged event.Emitter
 }
 
+// StaticAutoNAT is a simple AutoNAT implementation when a single NAT status is desired.
 type StaticAutoNAT struct {
 	ctx          context.Context
 	host         host.Host
@@ -85,15 +86,12 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 		if err != nil {
 			return nil, err
 		}
+		service.Enable()
 	}
 
 	if conf.forceReachability {
 		emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: conf.reachability})
 
-		// The serice will only exist when reachability is public.
-		if service != nil {
-			service.Enable()
-		}
 		return &StaticAutoNAT{
 			ctx:          ctx,
 			host:         h,
@@ -297,7 +295,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 		if currentStatus.Reachability != network.ReachabilityUnknown {
 			if as.service != nil {
-				as.service.Disable()
+				as.service.Enable()
 			}
 			as.emitStatus()
 		}
@@ -362,10 +360,12 @@ func shufflePeers(peers []peer.AddrInfo) {
 	}
 }
 
+// Status returns the AutoNAT observed reachability status.
 func (s *StaticAutoNAT) Status() network.Reachability {
 	return s.reachability
 }
 
+// PublicAddr returns the publicly connectable Multiaddr of this node if one is known.
 func (s *StaticAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 	if s.reachability != network.ReachabilityPublic {
 		return nil, errors.New("NAT status is not public")

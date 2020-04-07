@@ -188,8 +188,8 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	connect(t, h, hc)
 
 	_, err = ac.DialBack(ctx, h.ID())
-	if err == nil {
-		t.Fatal("autonat should not be started / advertising.")
+	if err != nil {
+		t.Fatal("autonat service be active in unknown mode.")
 	}
 
 	sub, _ := h.EventBus().Subscribe(new(event.EvtLocalReachabilityChanged))
