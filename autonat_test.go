@@ -56,7 +56,14 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
 	a, _ := New(ctx, h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
 	a.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
+	a.(*AmbientAutoNAT).config.throttlePeerPeriod = 100 * time.Millisecond
 	return h, a
+}
+
+func identifyAsServer(server, recip host.Host) {
+	recip.Peerstore().AddAddrs(server.ID(), server.Addrs(), time.Minute)
+	recip.Peerstore().AddProtocols(server.ID(), AutoNATProto)
+
 }
 
 func connect(t *testing.T, a, b host.Host) {
@@ -129,7 +136,7 @@ func TestAutoNATPublic(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 
 	status = an.Status()
 	if status != network.ReachabilityPublic {
@@ -158,7 +165,7 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 
 	status = an.Status()
 	if status != network.ReachabilityPublic {
@@ -168,7 +175,13 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	expectEvent(t, s, network.ReachabilityPublic)
 
 	hs.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
+	hps := makeAutoNATServicePrivate(ctx, t)
+	connect(t, hps, hc)
+	identifyAsServer(hps, hc)
+
 	time.Sleep(2 * time.Second)
+
+	expectEvent(t, s, network.ReachabilityPrivate)
 
 	status = an.Status()
 	if status != network.ReachabilityPrivate {
