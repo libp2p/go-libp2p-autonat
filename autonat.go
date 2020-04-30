@@ -171,8 +171,6 @@ func (as *AmbientAutoNAT) background() {
 	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	timerRunning := true
-	var peer peer.ID
-
 	for {
 		select {
 		// new inbound connection.
@@ -188,7 +186,7 @@ func (as *AmbientAutoNAT) background() {
 			}
 
 		case e := <-subChan:
-			switch e.(type) {
+			switch e := e.(type) {
 			case event.EvtLocalAddressesUpdated:
 				if !lastAddrUpdated.Add(time.Second).After(time.Now()) {
 					lastAddrUpdated = time.Now()
@@ -197,13 +195,14 @@ func (as *AmbientAutoNAT) background() {
 					}
 				}
 			case event.EvtPeerIdentificationCompleted:
-				peer = e.(event.EvtPeerIdentificationCompleted).Peer
-				if s, err := as.host.Peerstore().SupportsProtocols(peer, AutoNATProto); err == nil && len(s) > 0 {
+				if s, err := as.host.Peerstore().SupportsProtocols(e.Peer, AutoNATProto); err == nil && len(s) > 0 {
 					currentStatus := as.status.Load().(autoNATResult)
 					if currentStatus.Reachability == network.ReachabilityUnknown {
-						as.tryProbe(peer)
+						as.tryProbe(e.Peer)
 					}
 				}
+			default:
+				log.Errorf("unknown event type: %T", e)
 			}
 
 		// probe finished.
@@ -213,7 +212,7 @@ func (as *AmbientAutoNAT) background() {
 			}
 			as.recordObservation(result)
 		case <-timer.C:
-			peer = as.getPeerToProbe()
+			peer := as.getPeerToProbe()
 			as.tryProbe(peer)
 			timerRunning = false
 		case <-as.ctx.Done():
