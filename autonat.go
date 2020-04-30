@@ -45,6 +45,7 @@ type AmbientAutoNAT struct {
 	service *autoNATService
 
 	emitReachabilityChanged event.Emitter
+	subscriber              event.Subscription
 }
 
 // StaticAutoNAT is a simple AutoNAT implementation when a single NAT status is desired.
@@ -114,6 +115,12 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	}
 	as.status.Store(autoNATResult{network.ReachabilityUnknown, nil})
 
+	subscriber, err := as.host.EventBus().Subscribe([]interface{}{new(event.EvtLocalAddressesUpdated), new(event.EvtPeerIdentificationCompleted)})
+	if err != nil {
+		return nil, err
+	}
+	as.subscriber = subscriber
+
 	h.Network().Notify(as)
 	go as.background()
 
@@ -157,13 +164,8 @@ func (as *AmbientAutoNAT) background() {
 	delay := as.config.bootDelay
 
 	var lastAddrUpdated time.Time
-	subAddrUpdated, _ := as.host.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
-	addrUpdatedChan := subAddrUpdated.Out()
-	defer subAddrUpdated.Close()
-
-	subIDOccured, _ := as.host.EventBus().Subscribe(new(event.EvtPeerIdentificationCompleted))
-	IDChan := subIDOccured.Out()
-	defer subIDOccured.Close()
+	subChan := as.subscriber.Out()
+	defer as.subscriber.Close()
 	defer as.emitReachabilityChanged.Close()
 
 	timer := time.NewTimer(delay)
@@ -180,23 +182,28 @@ func (as *AmbientAutoNAT) background() {
 			if ca.address != nil {
 				localAddrs = append(localAddrs, ca.address)
 			}
-			if !ipInList(conn.RemoteMultiaddr(), localAddrs) {
+			if manet.IsPublicAddr(conn.RemoteMultiaddr()) &&
+				!ipInList(conn.RemoteMultiaddr(), localAddrs) {
 				as.lastInbound = time.Now()
 			}
 
-		case <-addrUpdatedChan:
-			if !lastAddrUpdated.Add(time.Second).After(time.Now()) {
-				lastAddrUpdated = time.Now()
-				if as.confidence > 1 {
-					as.confidence--
+		case e := <-subChan:
+			switch e.(type) {
+			case event.EvtLocalAddressesUpdated:
+				if !lastAddrUpdated.Add(time.Second).After(time.Now()) {
+					lastAddrUpdated = time.Now()
+					if as.confidence > 1 {
+						as.confidence--
+					}
 				}
-			}
-
-		// peer identification occured.
-		case idev := <-IDChan:
-			peer = idev.(event.EvtPeerIdentificationCompleted).Peer
-			if s, err := as.host.Peerstore().SupportsProtocols(peer, AutoNATProto); err != nil || len(s) > 0 {
-				as.tryProbe(peer)
+			case event.EvtPeerIdentificationCompleted:
+				peer = e.(event.EvtPeerIdentificationCompleted).Peer
+				if s, err := as.host.Peerstore().SupportsProtocols(peer, AutoNATProto); err == nil && len(s) > 0 {
+					currentStatus := as.status.Load().(autoNATResult)
+					if currentStatus.Reachability == network.ReachabilityUnknown {
+						as.tryProbe(peer)
+					}
+				}
 			}
 
 		// probe finished.
@@ -364,15 +371,23 @@ func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
 
 	a, err := cli.DialBack(ctx, pi.ID)
 
+	var result autoNATResult
 	switch {
 	case err == nil:
 		log.Debugf("Dialback through %s successful; public address is %s", pi.ID.Pretty(), a.String())
-		as.observations <- autoNATResult{network.ReachabilityPublic, a}
+		result.Reachability = network.ReachabilityPublic
+		result.address = a
 	case IsDialError(err):
 		log.Debugf("Dialback through %s failed", pi.ID.Pretty())
-		as.observations <- autoNATResult{network.ReachabilityPrivate, nil}
+		result.Reachability = network.ReachabilityPrivate
 	default:
-		as.observations <- autoNATResult{network.ReachabilityUnknown, nil}
+		result.Reachability = network.ReachabilityUnknown
+	}
+
+	select {
+	case as.observations <- result:
+	case <-as.ctx.Done():
+		return
 	}
 }
 
@@ -398,11 +413,11 @@ func (as *AmbientAutoNAT) getPeerToProbe() peer.ID {
 			}
 		}
 
-		if !as.config.dialPolicy.skipPeer(info.Addrs) {
-			candidates = append(candidates, p)
+		if as.config.dialPolicy.skipPeer(info.Addrs) {
+			continue
 		}
+		candidates = append(candidates, p)
 	}
-	// TODO: track and exclude recently probed peers.
 
 	if len(candidates) == 0 {
 		return ""
