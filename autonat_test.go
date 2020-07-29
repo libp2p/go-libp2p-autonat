@@ -5,15 +5,16 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/libp2p/go-libp2p-autonat/pb"
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 
-	ggio "github.com/gogo/protobuf/io"
+	pb "github.com/libp2p/go-libp2p-autonat/pb"
+
 	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+	"github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -32,7 +33,7 @@ func makeAutoNATServicePublic(ctx context.Context, t *testing.T) host.Host {
 
 func sayAutoNATPrivate(s network.Stream) {
 	defer s.Close()
-	w := ggio.NewDelimitedWriter(s)
+	w := protoio.NewDelimitedWriter(s)
 	res := pb.Message{
 		Type:         pb.Message_DIAL_RESPONSE.Enum(),
 		DialResponse: newDialResponseError(pb.Message_E_DIAL_ERROR, "no dialable addresses"),
@@ -42,7 +43,7 @@ func sayAutoNATPrivate(s network.Stream) {
 
 func sayAutoNATPublic(s network.Stream) {
 	defer s.Close()
-	w := ggio.NewDelimitedWriter(s)
+	w := protoio.NewDelimitedWriter(s)
 	res := pb.Message{
 		Type:         pb.Message_DIAL_RESPONSE.Enum(),
 		DialResponse: newDialResponseOK(s.Conn().RemoteMultiaddr()),
