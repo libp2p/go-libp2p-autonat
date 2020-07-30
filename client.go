@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	pb "github.com/libp2p/go-libp2p-autonat/pb"
 	"github.com/libp2p/go-libp2p-core/helpers"
-
-	ggio "github.com/gogo/protobuf/io"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+
+	pb "github.com/libp2p/go-libp2p-autonat/pb"
+
+	protoio "github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -43,8 +44,8 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	// don't care about being nice.
 	defer helpers.FullClose(s)
 
-	r := ggio.NewDelimitedReader(s, network.MessageSizeMax)
-	w := ggio.NewDelimitedWriter(s)
+	r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
+	w := protoio.NewDelimitedWriter(s)
 
 	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: c.addrFunc()})
 	err = w.WriteMsg(req)
