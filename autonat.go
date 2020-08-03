@@ -443,9 +443,5 @@ func (s *StaticAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 	if s.reachability != network.ReachabilityPublic {
 		return nil, errors.New("NAT status is not public")
 	}
-	addrs := s.host.Addrs()
-	if len(addrs) > 0 {
-		return s.host.Addrs()[0], nil
-	}
 	return nil, errors.New("No available address")
 }
