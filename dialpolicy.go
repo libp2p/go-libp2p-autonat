@@ -5,7 +5,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/host"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 type dialPolicy struct {
