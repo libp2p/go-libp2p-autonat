@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
@@ -17,7 +16,7 @@ import (
 
 	"github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr-net"
+	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 // AutoNATService provides NAT autodetection services to other peers
@@ -51,7 +50,7 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 }
 
 func (as *autoNATService) handleStream(s network.Stream) {
-	defer helpers.FullClose(s)
+	defer s.Close()
 
 	pid := s.Conn().RemotePeer()
 	log.Debugf("New stream from %s", pid.Pretty())

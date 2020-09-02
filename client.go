@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/libp2p/go-libp2p-core/helpers"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -42,7 +41,7 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	}
 	// Might as well just reset the stream. Once we get to this point, we
 	// don't care about being nice.
-	defer helpers.FullClose(s)
+	defer s.Close()
 
 	r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
 	w := protoio.NewDelimitedWriter(s)

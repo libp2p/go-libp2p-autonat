@@ -108,7 +108,7 @@ func TestAutoNATPrivate(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	status = an.Status()
 	if status != network.ReachabilityPrivate {
