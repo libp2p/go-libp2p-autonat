@@ -28,7 +28,8 @@ message Message {
   message DialResponse {
     optional ResponseStatus status = 1;
     optional string statusText = 2;
-    optional bytes addr = 3;
+    repeated bytes successAddrs = 3;
+    repeated bytes failedAddrs = 4;
   }
 
   optional MessageType type = 1;

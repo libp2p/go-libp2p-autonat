@@ -34,10 +34,10 @@ type client struct {
 	addrFunc AddrFunc
 }
 
-func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
+func (c *client) DialBack(ctx context.Context, p peer.ID) (success, failed []ma.Multiaddr, err error) {
 	s, err := c.h.NewStream(ctx, p, AutoNATProto)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Might as well just reset the stream. Once we get to this point, we
 	// don't care about being nice.
@@ -50,28 +50,41 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	err = w.WriteMsg(req)
 	if err != nil {
 		s.Reset()
-		return nil, err
+		return nil, nil, err
 	}
 
 	var res pb.Message
 	err = r.ReadMsg(&res)
 	if err != nil {
 		s.Reset()
-		return nil, err
+		return nil, nil, err
 	}
 
 	if res.GetType() != pb.Message_DIAL_RESPONSE {
-		return nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
+		return nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
 	status := res.GetDialResponse().GetStatus()
 	switch status {
 	case pb.Message_OK:
-		addr := res.GetDialResponse().GetAddr()
-		return ma.NewMultiaddrBytes(addr)
+		res := res.GetDialResponse()
+		success = make([]ma.Multiaddr, 0, len(res.SuccessAddrs))
+		for _, ab := range res.SuccessAddrs {
+			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
+				success = append(success, a)
+			}
+		}
+
+		failed = make([]ma.Multiaddr, 0, len(res.FailedAddrs))
+		for _, ab := range res.FailedAddrs {
+			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
+				failed = append(failed, a)
+			}
+		}
+		return success, failed, nil
 
 	default:
-		return nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
+		return nil, nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
 	}
 }
 

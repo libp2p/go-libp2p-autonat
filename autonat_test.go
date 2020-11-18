@@ -46,7 +46,7 @@ func sayAutoNATPublic(s network.Stream) {
 	w := protoio.NewDelimitedWriter(s)
 	res := pb.Message{
 		Type:         pb.Message_DIAL_RESPONSE.Enum(),
-		DialResponse: newDialResponseOK(s.Conn().RemoteMultiaddr()),
+		DialResponse: newDialResponseOK([]ma.Multiaddr{s.Conn().RemoteMultiaddr()}, nil),
 	}
 	w.WriteMsg(&res)
 }

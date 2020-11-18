@@ -10,7 +10,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p-core/transport"
 
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
 
@@ -32,12 +32,14 @@ type autoNATService struct {
 	mx         sync.Mutex
 	reqs       map[peer.ID]int
 	globalReqs int
+
+	transports []transport.Transport
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
 func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) {
-	if c.dialer == nil {
-		return nil, errors.New("Cannot create NAT service without a network")
+	if len(c.transports) == 0 {
+		return nil, errors.New("Cannot create NAT service without transports")
 	}
 
 	as := &autoNATService{
@@ -46,6 +48,7 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 		reqs:   make(map[peer.ID]int),
 	}
 
+	as.transports = append(as.transports, c.transports...)
 	return as, nil
 }
 
@@ -151,6 +154,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 	return as.doDial(peer.AddrInfo{ID: p, Addrs: addrs})
 }
 
+// We will try to diversify dial attempts across IP addresses and transports.
 func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	// rate limit check
 	as.mx.Lock()
@@ -167,21 +171,83 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	ctx, cancel := context.WithTimeout(as.ctx, as.config.dialTimeout)
 	defer cancel()
 
-	as.config.dialer.Peerstore().ClearAddrs(pi.ID)
+	// START DIALING
+	// 1. Aim is to diversify dial attempts across address groups where the grouping key is (IP address + transport protocol(port dosen't matter))
+	// 2. We will continue dialing addresses in a group till we see a successful dial for an address.
+	// 3. If we see a successful address, we move on to the next group.
+	// 4. If we never see a success, we will exhaust all the addresses in a group and not visit it again.
+	// 5. Keep cycling through the groups till we either exhaust all addresses or see enough successful dials.
+	successAddrs := make([]ma.Multiaddr, 0, len(pi.Addrs))
+	failedAddrs := make([]ma.Multiaddr, 0, len(pi.Addrs))
+	nsuccessDials := 0
+	ntotalDials := 0
 
-	as.config.dialer.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.TempAddrTTL)
-	conn, err := as.config.dialer.DialPeer(ctx, pi.ID)
-	if err != nil {
-		log.Debugf("error dialing %s: %s", pi.ID.Pretty(), err.Error())
-		// wait for the context to timeout to avoid leaking timing information
-		// this renders the service ineffective as a port scanner
-		<-ctx.Done()
-		return newDialResponseError(pb.Message_E_DIAL_ERROR, "dial failed")
+	addrGroups := make(map[string][]ma.Multiaddr)
+	for _, a := range pi.Addrs {
+		group := groupKey(a)
+		addrGroups[group] = append(addrGroups[group], a)
 	}
 
-	ra := conn.RemoteMultiaddr()
-	as.config.dialer.ClosePeer(pi.ID)
-	return newDialResponseOK(ra)
+MAINLOOP:
+	for {
+		for group := range addrGroups {
+			dialSuccess := false
+		ADDRLOOP:
+			for i, addr := range addrGroups[group] {
+
+				for _, t := range as.transports {
+					if t.CanDial(addr) {
+						cc, err := t.Dial(ctx, addr, pi.ID)
+						if err == nil {
+							// TODO Is this a reasonable check ?
+							if cc.RemoteMultiaddr().Equal(addr) {
+								successAddrs = append(successAddrs, addr)
+							}
+							if err := cc.Close(); err != nil {
+								log.Warnf("failed to close opened connection: %w", err)
+							}
+
+							// we've seen enough successful dials, we are done.
+							nsuccessDials++
+							if nsuccessDials >= as.config.maxSuccessfulDials {
+								break MAINLOOP
+							}
+							dialSuccess = true
+						} else {
+							log.Debugf("error dialing %s on address %s: %s", pi.ID.Pretty(), addr, err.Error())
+							failedAddrs = append(failedAddrs, addr)
+						}
+						break
+					}
+				}
+				ntotalDials++
+				// we've exhausted all addresses, we are done.
+				if ntotalDials >= len(pi.Addrs) {
+					break MAINLOOP
+				}
+				// we saw a success, let's change the yet to be dialed addresses accordingly and move on
+				// to the next group
+				if dialSuccess {
+					// if we've exhausted all addresses, just remove the group
+					if i >= len(addrGroups[group])-1 {
+						addrGroups[group] = nil
+					} else {
+						addrGroups[group] = addrGroups[group][i+1:]
+					}
+					break ADDRLOOP
+				}
+			}
+
+			if !dialSuccess {
+				// we went through all addresses for the group without seeing a success
+				// just remove the group and move on
+				addrGroups[group] = nil
+			}
+		}
+	}
+
+	// TODO How to make this ineffective as a port scanner now ?
+	return newDialResponseOK(successAddrs, failedAddrs)
 }
 
 // Enable the autoNAT service if it is not running.
@@ -227,4 +293,22 @@ func (as *autoNATService) background(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// GroupKey returns the group in which this address belongs. Currently, an
+// address's group is just the address with all ports set to 0.
+func groupKey(addr ma.Multiaddr) string {
+	key := make([]byte, 0, len(addr.Bytes()))
+	ma.ForEach(addr, func(c ma.Component) bool {
+		switch proto := c.Protocol(); proto.Code {
+		case ma.P_TCP, ma.P_UDP:
+			key = append(key, proto.VCode...)
+			key = append(key, 0, 0) // zero in two bytes
+		default:
+			key = append(key, c.Bytes()...)
+		}
+		return true
+	})
+
+	return string(key)
 }

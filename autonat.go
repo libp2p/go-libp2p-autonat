@@ -83,7 +83,7 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	emitReachabilityChanged, _ := h.EventBus().Emitter(new(event.EvtLocalReachabilityChanged), eventbus.Stateful)
 
 	var service *autoNATService
-	if (!conf.forceReachability || conf.reachability == network.ReachabilityPublic) && conf.dialer != nil {
+	if (!conf.forceReachability || conf.reachability == network.ReachabilityPublic) && len(conf.transports) != 0 {
 		service, err = newAutoNATService(ctx, conf)
 		if err != nil {
 			return nil, err
@@ -368,14 +368,22 @@ func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
 	ctx, cancel := context.WithTimeout(as.ctx, as.config.requestTimeout)
 	defer cancel()
 
-	a, err := cli.DialBack(ctx, pi.ID)
+	success, failed, err := cli.DialBack(ctx, pi.ID)
 
 	var result autoNATResult
 	switch {
 	case err == nil:
-		log.Debugf("Dialback through %s successful; public address is %s", pi.ID.Pretty(), a.String())
-		result.Reachability = network.ReachabilityPublic
-		result.address = a
+		if len(success) != 0 {
+			log.Debugf("Dialback through %s successful; public addresses are %s", pi.ID.Pretty(), success)
+			result.Reachability = network.ReachabilityPublic
+			// TODO Have per address confidence
+			result.address = success[0]
+		} else if len(failed) != 0 {
+			// TODO Record information about failed addresses
+			// Maybe decrement the confidence ?
+			result.Reachability = network.ReachabilityPrivate
+		}
+
 	case IsDialError(err):
 		log.Debugf("Dialback through %s failed", pi.ID.Pretty())
 		result.Reachability = network.ReachabilityPrivate

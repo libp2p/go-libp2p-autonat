@@ -21,8 +21,8 @@ type AutoNAT interface {
 // Client is a stateless client interface to AutoNAT peers
 type Client interface {
 	// DialBack requests from a peer providing AutoNAT services to test dial back
-	// and report the address on a successful connection.
-	DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error)
+	// and reports the addresses that were successfully dialled and the addresses for which dialbacks failed.
+	DialBack(ctx context.Context, p peer.ID) (success, failed []ma.Multiaddr, err error)
 }
 
 // AddrFunc is a function returning the candidate addresses for the local host.

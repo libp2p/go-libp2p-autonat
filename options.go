@@ -6,6 +6,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/transport"
 )
 
 // config holds configurable options for the autonat subsystem.
@@ -14,7 +15,7 @@ type config struct {
 
 	addressFunc       AddrFunc
 	dialPolicy        dialPolicy
-	dialer            network.Network
+	transports        []transport.Transport
 	forceReachability bool
 	reachability      network.Reachability
 
@@ -28,6 +29,7 @@ type config struct {
 	// server
 	dialTimeout         time.Duration
 	maxPeerAddresses    int
+	maxSuccessfulDials  int
 	throttleGlobalMax   int
 	throttlePeerMax     int
 	throttleResetPeriod time.Duration
@@ -43,6 +45,7 @@ var defaults = func(c *config) error {
 
 	c.dialTimeout = 15 * time.Second
 	c.maxPeerAddresses = 16
+	c.maxSuccessfulDials = 4
 	c.throttleGlobalMax = 30
 	c.throttlePeerMax = 3
 	c.throttleResetPeriod = 1 * time.Minute
@@ -56,12 +59,12 @@ var defaults = func(c *config) error {
 // make parallel connections, and as such will modify both the associated peerstore
 // and terminate connections of this dialer. The dialer provided
 // should be compatible (TCP/UDP) however with the transports of the libp2p network.
-func EnableService(dialer network.Network) Option {
+func EnableService(transports ...transport.Transport) Option {
 	return func(c *config) error {
-		if dialer == c.host.Network() || dialer.Peerstore() == c.host.Peerstore() {
-			return errors.New("dialer should not be that of the host")
+		if len(transports) == 0 {
+			return errors.New("no transports given")
 		}
-		c.dialer = dialer
+		c.transports = append(c.transports, transports...)
 		return nil
 	}
 }
