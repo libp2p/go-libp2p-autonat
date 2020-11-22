@@ -7,6 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/transport"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 // config holds configurable options for the autonat subsystem.
@@ -18,6 +19,7 @@ type config struct {
 	transports        []transport.Transport
 	forceReachability bool
 	reachability      network.Reachability
+	dialAddrs         []ma.Multiaddr
 
 	// client
 	bootDelay          time.Duration

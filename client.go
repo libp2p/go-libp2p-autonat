@@ -22,22 +22,18 @@ type Error struct {
 
 // NewAutoNATClient creates a fresh instance of an AutoNATClient
 // If addrFunc is nil, h.Addrs will be used
-func NewAutoNATClient(h host.Host, addrFunc AddrFunc) Client {
-	if addrFunc == nil {
-		addrFunc = h.Addrs
-	}
-	return &client{h: h, addrFunc: addrFunc}
+func NewAutoNATClient(h host.Host) Client {
+	return &client{h: h}
 }
 
 type client struct {
-	h        host.Host
-	addrFunc AddrFunc
+	h host.Host
 }
 
-func (c *client) DialBack(ctx context.Context, p peer.ID) (success, failed []ma.Multiaddr, err error) {
+func (c *client) DialBack(ctx context.Context, p peer.ID, addrsToDial []ma.Multiaddr) (success, failed []ma.Multiaddr, observer ma.Multiaddr, err error) {
 	s, err := c.h.NewStream(ctx, p, AutoNATProto)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Might as well just reset the stream. Once we get to this point, we
 	// don't care about being nice.
@@ -46,22 +42,22 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (success, failed []ma.
 	r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
 	w := protoio.NewDelimitedWriter(s)
 
-	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: c.addrFunc()})
+	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: addrsToDial})
 	err = w.WriteMsg(req)
 	if err != nil {
 		s.Reset()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var res pb.Message
 	err = r.ReadMsg(&res)
 	if err != nil {
 		s.Reset()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if res.GetType() != pb.Message_DIAL_RESPONSE {
-		return nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
+		return nil, nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
 	status := res.GetDialResponse().GetStatus()
@@ -81,11 +77,20 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (success, failed []ma.
 				failed = append(failed, a)
 			}
 		}
-		return success, failed, nil
+		return success, failed, s.Conn().RemoteMultiaddr(), nil
 
 	default:
-		return nil, nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
+		return nil, nil, nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
 	}
+}
+
+// 1. Aim is to diversify the server's dial attempts across address groups where the grouping key is (IP address + transport protocol(port dosen't matter))
+// 2. We will continue dialing addresses in a group till we see a successful dial for an address.
+// 3. If we see a successful address, we move on to the next group.
+// 4. If we never see a success, we will exhaust all the addresses in a group and not visit it again.
+// 5. Keep cycling through the groups till we either exhaust all addresses or see enough successful dials.
+func rankedAddresses(addrs []ma.Multiaddr) []ma.Multiaddr {
+	return addrs
 }
 
 func (e Error) Error() string {

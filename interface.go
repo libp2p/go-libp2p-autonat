@@ -13,16 +13,19 @@ import (
 type AutoNAT interface {
 	// Status returns the current NAT status
 	Status() network.Reachability
-	// PublicAddr returns the public dial address when NAT status is public and an
-	// error otherwise
-	PublicAddr() (ma.Multiaddr, error)
+	// PublicDialAddrs returns the public dial addresses as determined by AutoNAT.
+	PublicDialAddrs() ([]ma.Multiaddr, error)
+}
+
+type DialBackResult struct {
+	results map[ma.Multiaddr]network.Reachability
 }
 
 // Client is a stateless client interface to AutoNAT peers
 type Client interface {
 	// DialBack requests from a peer providing AutoNAT services to test dial back
 	// and reports the addresses that were successfully dialled and the addresses for which dialbacks failed.
-	DialBack(ctx context.Context, p peer.ID) (success, failed []ma.Multiaddr, err error)
+	DialBack(ctx context.Context, p peer.ID, addrsToDial []ma.Multiaddr) (success, failed []ma.Multiaddr, observer ma.Multiaddr, err error)
 }
 
 // AddrFunc is a function returning the candidate addresses for the local host.
