@@ -154,7 +154,6 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 	return as.doDial(peer.AddrInfo{ID: p, Addrs: addrs})
 }
 
-// We will try to diversify dial attempts across IP addresses and transports.
 func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	// rate limit check
 	as.mx.Lock()

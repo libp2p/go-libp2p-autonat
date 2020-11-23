@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"golang.org/x/xerrors"
 
 	logging "github.com/ipfs/go-log"
 	ma "github.com/multiformats/go-multiaddr"
@@ -19,8 +20,6 @@ import (
 )
 
 var log = logging.Logger("autonat")
-
-const maxConfidenceThreshold = 3
 
 // AmbientAutoNAT is the implementation of ambient NAT autodiscovery
 type AmbientAutoNAT struct {
@@ -41,17 +40,14 @@ type AmbientAutoNAT struct {
 	emitReachabilityChanged event.Emitter
 	subscriber              event.Subscription
 
-	confirmedAddrsManager *dialedAddrsManager
-	privateAddrsManager   *dialedAddrsManager
-
 	addrsSet *addrset.DialAddrsSet
+	// returns addresses that have been confirmed to be public by the AutoNAT server
+	publicAddrsManager *dialedAddrsManager
+	// returns addresses that have been confirmed to be private by the AutoNAT server
+	privateAddrsManager *dialedAddrsManager
 
+	// current NAT status and known dialable addresses.
 	status atomic.Value
-}
-
-type addrStatus struct {
-	reach      network.Reachability
-	confidence int
 }
 
 // StaticAutoNAT is a simple AutoNAT implementation when a single NAT status is desired.
@@ -64,8 +60,8 @@ type StaticAutoNAT struct {
 }
 
 type natStatus struct {
-	Reachability network.Reachability
-	PublicAddrs  []ma.Multiaddr
+	reachability network.Reachability
+	publicAddrs  []ma.Multiaddr
 }
 
 type autoNATResult struct {
@@ -83,9 +79,6 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 
 	if err = defaults(conf); err != nil {
 		return nil, err
-	}
-	if conf.addressFunc == nil {
-		conf.addressFunc = h.Addrs
 	}
 
 	for _, o := range options {
@@ -107,6 +100,10 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	if conf.forceReachability {
 		emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: conf.reachability})
 
+		if conf.reachability == network.ReachabilityPublic && len(conf.dialAddrs) == 0 {
+			return nil, xerrors.New("dial addrs must be configured if forced reachability is public")
+		}
+
 		return &StaticAutoNAT{
 			ctx:          ctx,
 			host:         h,
@@ -127,13 +124,14 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 		service:                 service,
 		recentProbes:            make(map[peer.ID]time.Time),
 
-		confirmedAddrsManager: newConfirmedAddrManager(),
-		privateAddrsManager:   newConfirmedAddrManager(),
+		addrsSet:            addrset.NewDialAddrsSet(),
+		publicAddrsManager:  newDialAddrManager(),
+		privateAddrsManager: newDialAddrManager(),
 	}
 
 	as.status.Store(natStatus{network.ReachabilityUnknown, nil})
 	subscriber, err := as.host.EventBus().Subscribe([]interface{}{new(event.EvtPeerIdentificationCompleted),
-		new(event.EvtDiscoveredAddress), eventbus.BufSize(256)})
+		new(event.EvtDiscoveredAddresses), eventbus.BufSize(256)})
 	if err != nil {
 		return nil, err
 	}
@@ -145,32 +143,22 @@ func New(ctx context.Context, h host.Host, options ...Option) (AutoNAT, error) {
 	return as, nil
 }
 
-func (as *AmbientAutoNAT) addrLoop() {
-	for {
-		select {
-		//
-		case <-as.ctx.Done():
-			return
-		}
-	}
-}
-
 // Status returns the AutoNAT observed reachability status.
 func (as *AmbientAutoNAT) Status() network.Reachability {
 	s := as.status.Load().(natStatus)
-	return s.Reachability
+	return s.reachability
 }
 
 func (as *AmbientAutoNAT) emitStatus() {
 	status := as.status.Load().(natStatus)
-	as.emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: status.Reachability})
+	as.emitReachabilityChanged.Emit(event.EvtLocalReachabilityChanged{Reachability: status.reachability})
 }
 
-// PublicAddr returns the publicly connectable Multiaddrs of this node.
-func (as *AmbientAutoNAT) PublicDialAddrs() ([]ma.Multiaddr, error) {
+// PublicAddr returns the publicly dialable Multiaddrs of this node.
+func (as *AmbientAutoNAT) PublicAddrs() ([]ma.Multiaddr, error) {
 	s := as.status.Load().(natStatus)
-	if len(s.PublicAddrs) != 0 {
-		return s.PublicAddrs, nil
+	if len(s.publicAddrs) != 0 {
+		return s.publicAddrs, nil
 	}
 
 	// return all non-private addresses
@@ -192,7 +180,6 @@ func (as *AmbientAutoNAT) background() {
 	// before starting autodetection
 	delay := as.config.bootDelay
 
-	var lastAddrUpdated time.Time
 	subChan := as.subscriber.Out()
 	defer as.subscriber.Close()
 	defer as.emitReachabilityChanged.Close()
@@ -207,8 +194,8 @@ func (as *AmbientAutoNAT) background() {
 		case conn := <-as.inboundConn:
 			localAddrs := as.host.Addrs()
 			ca := as.status.Load().(natStatus)
-			if ca.PublicAddrs != nil {
-				localAddrs = append(localAddrs, ca.PublicAddrs...)
+			if ca.publicAddrs != nil {
+				localAddrs = append(localAddrs, ca.publicAddrs...)
 			}
 			if manet.IsPublicAddr(conn.RemoteMultiaddr()) &&
 				!ipInList(conn.RemoteMultiaddr(), localAddrs) {
@@ -220,12 +207,12 @@ func (as *AmbientAutoNAT) background() {
 			case event.EvtPeerIdentificationCompleted:
 				if s, err := as.host.Peerstore().SupportsProtocols(e.Peer, AutoNATProto); err == nil && len(s) > 0 {
 					currentStatus := as.status.Load().(natStatus)
-					if currentStatus.Reachability == network.ReachabilityUnknown {
+					if currentStatus.reachability == network.ReachabilityUnknown {
 						as.tryProbe(e.Peer)
 					}
 				}
 
-			case event.EvtDiscoveredAddress:
+			case event.EvtDiscoveredAddresses:
 				switch e.Source {
 				case event.IdentifyObserved:
 					for _, a := range e.Addresses {
@@ -253,9 +240,10 @@ func (as *AmbientAutoNAT) background() {
 
 				case event.NetRouteChange:
 					// TODO Should we negate all information now ?
-					// event should contain new resolved addresses
+					// i.e. Should we clear out address set and address managers
+					// OR Remove all previous listen addresses we've heard of ?
 
-					// clear out address set and address managers
+					// event should contain new resolved interface listen addresses
 					for _, a := range e.Addresses {
 						as.addrsSet.TryAdd(a)
 						as.addrsSet.SetState(a, addrset.UnconfirmedListenUnknown)
@@ -321,11 +309,11 @@ func (as *AmbientAutoNAT) scheduleProbe() time.Duration {
 	}
 	if !as.lastProbe.IsZero() {
 		untilNext := as.config.refreshInterval
-		if currentStatus.Reachability == network.ReachabilityUnknown {
+		if currentStatus.reachability == network.ReachabilityUnknown {
 			untilNext = as.config.retryInterval
-		} else if currentStatus.Reachability == network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
+		} else if currentStatus.reachability == network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
 			untilNext *= 2
-		} else if currentStatus.Reachability != network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
+		} else if currentStatus.reachability != network.ReachabilityPublic && as.lastInbound.After(as.lastProbe) {
 			untilNext /= 5
 		}
 
@@ -343,7 +331,7 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	for addr, reach := range observation.addrReachability {
 		switch reach {
 		case network.ReachabilityPublic:
-			as.confirmedAddrsManager.record(observation.observer, addr)
+			as.publicAddrsManager.record(observation.observer, addr)
 
 		case network.ReachabilityPrivate:
 			as.privateAddrsManager.record(observation.observer, addr)
@@ -351,12 +339,12 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 	}
 
 	// piggy-back gcs on top of recoding as these are NOT heavy operations.
-	as.confirmedAddrsManager.gc()
+	as.publicAddrsManager.gc()
 	as.privateAddrsManager.gc()
 
 	// update information about confirmed addresses
 	oldConfirmed := as.addrsSet.GetAddrsInStates(addrset.Confirmed)
-	newConfirmed := as.confirmedAddrsManager.activatedAddrs()
+	newConfirmed := as.publicAddrsManager.activatedAddrs()
 	// remove confirmed addrs from the address set that are no longer confirmed
 	oldMap := make(map[ma.Multiaddr]struct{}, len(oldConfirmed))
 	for _, a := range oldConfirmed {
@@ -424,10 +412,10 @@ func (as *AmbientAutoNAT) recordObservation(observation autoNATResult) {
 		reach = network.ReachabilityUnknown
 	}
 
-	if currentStatus.Reachability != reach {
-		status := natStatus{Reachability: reach}
+	if currentStatus.reachability != reach {
+		status := natStatus{reachability: reach}
 		if reach == network.ReachabilityPublic {
-			status.PublicAddrs = as.confirmedAddrsManager.activatedAddrs()
+			status.publicAddrs = as.publicAddrsManager.activatedAddrs()
 		}
 		as.status.Store(status)
 		as.emitStatus()
@@ -464,7 +452,6 @@ func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
 	defer cancel()
 
 	toDial := as.dialAddrs()
-
 	success, failed, observer, err := cli.DialBack(ctx, pi.ID, toDial)
 	var result autoNATResult
 	result.observer = observer
@@ -485,6 +472,8 @@ func (as *AmbientAutoNAT) probe(pi *peer.AddrInfo) {
 		}
 
 		results := make(map[ma.Multiaddr]network.Reachability)
+		// if the server sent us a success/failure response for an address we sent to it,
+		// mark it as such, otherwise mark it as ReachabilityUnknown.
 		for _, a := range toDial {
 			if r, ok := addrReachable[a]; ok {
 				results[a] = r
@@ -516,7 +505,7 @@ func (as *AmbientAutoNAT) dialAddrs() []ma.Multiaddr {
 	if len(confirmed) < n {
 		n = len(confirmed)
 	}
-	toDial = append(confirmed[:n])
+	toDial = append(toDial, confirmed[:n]...)
 
 	// listen
 	toDial = append(toDial, as.addrsSet.GetAddrsInStates(addrset.UnconfirmedListenUnknown)...)
@@ -583,6 +572,6 @@ func (s *StaticAutoNAT) Status() network.Reachability {
 }
 
 // PublicAddr returns the publicly connectable Multiaddr of this node if one is known.
-func (s *StaticAutoNAT) PublicDialAddrs() ([]ma.Multiaddr, error) {
+func (s *StaticAutoNAT) PublicAddrs() ([]ma.Multiaddr, error) {
 	return s.addrs, nil
 }

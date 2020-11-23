@@ -33,8 +33,6 @@ type DialAddrsSet struct {
 type dialAddrState struct {
 	addr  ma.Multiaddr
 	state AddrState
-	// confidence is the confidence we have in the state. Only applies to private addrs for now.
-	confidence int
 }
 
 // DialAddrsSet creates a new empty set of dial addresses.
@@ -73,12 +71,6 @@ func (ds *DialAddrsSet) SetState(a ma.Multiaddr, s AddrState) {
 	ds.all[ds.find(a)].state = s
 }
 
-// IncrementConfidence increments the confidence of a
-// If a is not in the address set, IncrementConfidence panics.
-func (ds *DialAddrsSet) IncrementConfidence(a ma.Multiaddr) {
-	ds.all[ds.find(a)].confidence = ds.all[ds.find(a)].confidence + 1
-}
-
 // GetState returns the state of address a.
 // If a is not in the address set, GetState panics.
 func (ds *DialAddrsSet) GetState(a ma.Multiaddr) AddrState {
@@ -99,7 +91,7 @@ func (ds *DialAddrsSet) GetAddrsInStates(states ...AddrState) []ma.Multiaddr {
 	return addrs
 }
 
-// AssertStateAndRemove aserts that address a is in the given state s and panics if is NOT.
+// AssertStateAndRemove aserts that address a is in the given state s (panics if is NOT).
 // It then remove the address from the address set.
 // AssertStateAndRemove will panic if a is NOT in the address set.
 func (ds *DialAddrsSet) AssertStateAndRemove(a ma.Multiaddr, s AddrState) {

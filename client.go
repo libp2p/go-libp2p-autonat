@@ -60,19 +60,19 @@ func (c *client) DialBack(ctx context.Context, p peer.ID, addrsToDial []ma.Multi
 		return nil, nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
-	status := res.GetDialResponse().GetStatus()
+	resp := res.GetDialResponse()
+	status := resp.GetStatus()
 	switch status {
 	case pb.Message_OK:
-		res := res.GetDialResponse()
-		success = make([]ma.Multiaddr, 0, len(res.SuccessAddrs))
-		for _, ab := range res.SuccessAddrs {
+		success = make([]ma.Multiaddr, 0, len(resp.SuccessAddrs))
+		for _, ab := range resp.SuccessAddrs {
 			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
 				success = append(success, a)
 			}
 		}
 
-		failed = make([]ma.Multiaddr, 0, len(res.FailedAddrs))
-		for _, ab := range res.FailedAddrs {
+		failed = make([]ma.Multiaddr, 0, len(resp.FailedAddrs))
+		for _, ab := range resp.FailedAddrs {
 			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
 				failed = append(failed, a)
 			}
@@ -80,17 +80,8 @@ func (c *client) DialBack(ctx context.Context, p peer.ID, addrsToDial []ma.Multi
 		return success, failed, s.Conn().RemoteMultiaddr(), nil
 
 	default:
-		return nil, nil, nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
+		return nil, nil, nil, Error{Status: status, Text: resp.GetStatusText()}
 	}
-}
-
-// 1. Aim is to diversify the server's dial attempts across address groups where the grouping key is (IP address + transport protocol(port dosen't matter))
-// 2. We will continue dialing addresses in a group till we see a successful dial for an address.
-// 3. If we see a successful address, we move on to the next group.
-// 4. If we never see a success, we will exhaust all the addresses in a group and not visit it again.
-// 5. Keep cycling through the groups till we either exhaust all addresses or see enough successful dials.
-func rankedAddresses(addrs []ma.Multiaddr) []ma.Multiaddr {
-	return addrs
 }
 
 func (e Error) Error() string {

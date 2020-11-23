@@ -13,12 +13,8 @@ import (
 type AutoNAT interface {
 	// Status returns the current NAT status
 	Status() network.Reachability
-	// PublicDialAddrs returns the public dial addresses as determined by AutoNAT.
-	PublicDialAddrs() ([]ma.Multiaddr, error)
-}
-
-type DialBackResult struct {
-	results map[ma.Multiaddr]network.Reachability
+	// PublicAddrs returns the public dial addresses as determined by AutoNAT.
+	PublicAddrs() ([]ma.Multiaddr, error)
 }
 
 // Client is a stateless client interface to AutoNAT peers

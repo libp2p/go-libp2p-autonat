@@ -14,7 +14,6 @@ import (
 type config struct {
 	host host.Host
 
-	addressFunc       AddrFunc
 	dialPolicy        dialPolicy
 	transports        []transport.Transport
 	forceReachability bool
@@ -56,11 +55,8 @@ var defaults = func(c *config) error {
 }
 
 // EnableService specifies that AutoNAT should be allowed to run a NAT service to help
-// other peers determine their own NAT status. The provided Network should not be the
-// default network/dialer of the host passed to `New`, as the NAT system will need to
-// make parallel connections, and as such will modify both the associated peerstore
-// and terminate connections of this dialer. The dialer provided
-// should be compatible (TCP/UDP) however with the transports of the libp2p network.
+// other peers determine their own NAT status. The resulting NAT service
+// will dial back addresses supported by one of the given transports.
 func EnableService(transports ...transport.Transport) Option {
 	return func(c *config) error {
 		if len(transports) == 0 {
@@ -77,20 +73,6 @@ func WithReachability(reachability network.Reachability) Option {
 	return func(c *config) error {
 		c.forceReachability = true
 		c.reachability = reachability
-		return nil
-	}
-}
-
-// UsingAddresses allows overriding which Addresses the AutoNAT client believes
-// are "its own". Useful for testing, or for more exotic port-forwarding
-// scenarios where the host may be listening on different ports than it wants
-// to externally advertise or verify connectability on.
-func UsingAddresses(addrFunc AddrFunc) Option {
-	return func(c *config) error {
-		if addrFunc == nil {
-			return errors.New("invalid address function supplied")
-		}
-		c.addressFunc = addrFunc
 		return nil
 	}
 }

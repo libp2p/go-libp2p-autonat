@@ -9,10 +9,10 @@ import (
 )
 
 // ActivationThresh sets how many times an address must be seen as "activated"
-// and therefore advertised to other peers as an address that the local peer
-// can be contacted on. The "seen" events expire by default after 40 minutes
-// (OwnObservedAddressTTL * ActivationThreshold). The are cleaned up during
-// the GC rounds set by GCInterval.
+// and therefore marked as confirmed.
+// The "seen" events expire by default after 40 minutes
+// (OwnObservedAddressTTL * ActivationThreshold). They are cleaned up during
+// GC.
 var activationThresh = 4
 
 // observation records an address observation from an "observer" (where every IP
@@ -24,7 +24,7 @@ type observation struct {
 
 // observedAddr is an entry for an address reported by AutoNAT servers.
 // We only use addresses that:
-// - have been observed at least 4 times in last 40 minutes. (counter symmetric nats)
+// - have been observed at least 4 times in last 40 minutes.
 // - have been observed at least once recently (10 minutes), because our position in the
 //   network, or network port mapppings, may have changed.
 type observedAddr struct {
@@ -45,7 +45,6 @@ func (oa *observedAddr) activated() bool {
 type newObservation struct {
 	observer ma.Multiaddr
 	observed ma.Multiaddr
-	resp     chan struct{}
 }
 
 // dialedAddrsManager keeps track of a addresses that are dialled by the AutoNAT server.
@@ -54,9 +53,9 @@ type dialedAddrsManager struct {
 	ttl   time.Duration
 }
 
-// newConfirmedAddrManager returns a new address manager using
+// newDialAddrManager returns a new address manager using
 // peerstore.OwnObservedAddressTTL as the TTL.
-func newConfirmedAddrManager() *dialedAddrsManager {
+func newDialAddrManager() *dialedAddrsManager {
 	oas := &dialedAddrsManager{
 		ttl: peerstore.OwnObservedAddrTTL,
 	}
