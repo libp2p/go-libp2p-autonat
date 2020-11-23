@@ -175,7 +175,7 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	failedAddrs := make([]ma.Multiaddr, 0, len(pi.Addrs))
 	nSuccessDials := 0
 
-	// The maximum number of addresses we dial is bounded by config.maxPeerAddresses as
+	// The maximum number of addresses we dial is bound by config.maxPeerAddresses as
 	// we don't pass more than that number of addresses to this function.
 ADDRLOOP:
 	for _, addr := range pi.Addrs {
