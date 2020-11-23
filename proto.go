@@ -25,10 +25,22 @@ func newDialMessage(pi peer.AddrInfo) *pb.Message {
 	return msg
 }
 
-func newDialResponseOK(addr ma.Multiaddr) *pb.Message_DialResponse {
+func newDialResponseOK(successAddrs, failedAddrs []ma.Multiaddr) *pb.Message_DialResponse {
 	dr := new(pb.Message_DialResponse)
 	dr.Status = pb.Message_OK.Enum()
-	dr.Addr = addr.Bytes()
+
+	dr.SuccessAddrs = make([][]byte, 0, len(successAddrs))
+	for _, a := range successAddrs {
+		ab := a.Bytes()
+		dr.SuccessAddrs = append(dr.SuccessAddrs, ab)
+	}
+
+	dr.FailedAddrs = make([][]byte, 0, len(failedAddrs))
+	for _, a := range failedAddrs {
+		ab := a.Bytes()
+		dr.FailedAddrs = append(dr.FailedAddrs, ab)
+	}
+
 	return dr
 }
 

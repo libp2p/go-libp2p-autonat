@@ -2,6 +2,7 @@ package autonat
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -9,19 +10,38 @@ import (
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/transport"
+	quic "github.com/libp2p/go-libp2p-quic-transport"
+	swarm "github.com/libp2p/go-libp2p-swarm"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
+	"github.com/libp2p/go-tcp-transport"
+	"github.com/stretchr/testify/require"
 
 	ma "github.com/multiformats/go-multiaddr"
 )
 
 func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	c := config{host: h, dialer: dh.Network()}
+	sw := swarmt.GenSwarm(t, ctx)
+	h := bhost.NewBlankHost(sw)
+	ts := mkTransports(t, sw)
+	c := config{host: h, transports: ts}
 	_ = defaults(&c)
 	c.forceReachability = true
 	c.dialPolicy.allowSelfDials = true
 	return &c
+}
+
+func mkTransports(t *testing.T, sw *swarm.Swarm) []transport.Transport {
+	u := swarmt.GenUpgrader(sw)
+
+	tcpTransport := tcp.NewTCPTransport(u)
+
+	quicTransport, err := quic.NewTransport(sw.Peerstore().PrivKey(sw.LocalPeer()), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return []transport.Transport{tcpTransport, quicTransport}
 }
 
 func makeAutoNATService(ctx context.Context, t *testing.T, c *config) *autoNATService {
@@ -34,9 +54,15 @@ func makeAutoNATService(ctx context.Context, t *testing.T, c *config) *autoNATSe
 	return as
 }
 
-func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, Client) {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+func makeAutoNATClient(ctx context.Context, t *testing.T, opts ...swarmt.Option) (host.Host, Client) {
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx, opts...))
 	cli := NewAutoNATClient(h, nil)
+	return h, cli
+}
+
+func makeAutoNATClientWithAddrFunc(ctx context.Context, t *testing.T, addrFunc AddrFunc, opts ...swarmt.Option) (host.Host, Client) {
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx, opts...))
+	cli := NewAutoNATClient(h, addrFunc)
 	return h, cli
 }
 
@@ -52,7 +78,7 @@ func TestAutoNATServiceDialError(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
 
-	_, err := ac.DialBack(ctx, c.host.ID())
+	_, _, err := ac.DialBack(ctx, c.host.ID())
 	if err == nil {
 		t.Fatal("Dial back succeeded unexpectedly!")
 	}
@@ -72,7 +98,7 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
 
-	_, err := ac.DialBack(ctx, c.host.ID())
+	_, _, err := ac.DialBack(ctx, c.host.ID())
 	if err != nil {
 		t.Fatalf("Dial back failed: %s", err.Error())
 	}
@@ -92,12 +118,12 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
 
-	_, err := ac.DialBack(ctx, c.host.ID())
+	_, _, err := ac.DialBack(ctx, c.host.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = ac.DialBack(ctx, c.host.ID())
+	_, _, err = ac.DialBack(ctx, c.host.ID())
 	if err == nil {
 		t.Fatal("Dial back succeeded unexpectedly!")
 	}
@@ -108,7 +134,7 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	_, err = ac.DialBack(ctx, c.host.ID())
+	_, _, err = ac.DialBack(ctx, c.host.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +158,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 		hc, ac := makeAutoNATClient(ctx, t)
 		connect(t, hs, hc)
 
-		_, err := ac.DialBack(ctx, hs.ID())
+		_, _, err := ac.DialBack(ctx, hs.ID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +166,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, hs, hc)
-	_, err := ac.DialBack(ctx, hs.ID())
+	_, _, err := ac.DialBack(ctx, hs.ID())
 	if err == nil {
 		t.Fatal("Dial back succeeded unexpectedly!")
 	}
@@ -176,9 +202,9 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	an, err := New(ctx, h, EnableService(dh.Network()))
+	sw := swarmt.GenSwarm(t, ctx)
+	h := bhost.NewBlankHost(sw)
+	an, err := New(ctx, h, EnableService(mkTransports(t, sw)...))
 	an.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	if err != nil {
 		t.Fatal(err)
@@ -187,7 +213,7 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, h, hc)
 
-	_, err = ac.DialBack(ctx, h.ID())
+	_, _, err = ac.DialBack(ctx, h.ID())
 	if err != nil {
 		t.Fatal("autonat service be active in unknown mode.")
 	}
@@ -199,11 +225,139 @@ func TestAutoNATServiceStartup(t *testing.T) {
 
 	<-sub.Out()
 
-	_, err = ac.DialBack(ctx, h.ID())
+	_, _, err = ac.DialBack(ctx, h.ID())
 	if err != nil {
 		t.Fatalf("autonat should be active, was %v", err)
 	}
 	if an.Status() != network.ReachabilityPublic {
 		t.Fatalf("autonat should report public, but didn't")
 	}
+}
+
+func TestAddressDiversityDial(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tcs := map[string]struct {
+		listenAddrs          []string // addresses the client host will listen on
+		addrsParams          []string // addresses we will ask the server to dial
+		expectedFailedAddrs  []string // successes we expect
+		expectedSuccessAddrs []string // failures we expect
+	}{
+		"one IPV4/tcp -> one success": {
+			listenAddrs:          []string{"/ip4/127.0.0.1/tcp/2001"},
+			addrsParams:          []string{"/ip4/127.0.0.1/tcp/2001"},
+			expectedSuccessAddrs: []string{"/ip4/127.0.0.1/tcp/2001"},
+		},
+		"one tcp, one quic -> both success": {
+			listenAddrs:          []string{"/ip4/127.0.0.1/tcp/5001", "/ip4/0.0.0.0/udp/5001/quic"},
+			addrsParams:          []string{"/ip4/127.0.0.1/tcp/5001", "/ip4/127.0.0.1/udp/5001/quic"},
+			expectedSuccessAddrs: []string{"/ip4/127.0.0.1/tcp/5001", "/ip4/127.0.0.1/udp/5001/quic"},
+		},
+		"three tcp, two quic -> two success from each": {
+			listenAddrs: []string{"/ip4/127.0.0.1/tcp/6001", "/ip4/127.0.0.1/tcp/6002", "/ip4/127.0.0.1/tcp/6003",
+				"/ip4/0.0.0.0/udp/6001/quic", "/ip4/0.0.0.0/udp/6002/quic"},
+
+			addrsParams: []string{"/ip4/127.0.0.1/tcp/6001", "/ip4/127.0.0.1/tcp/6002", "/ip4/127.0.0.1/tcp/6003",
+				"/ip4/127.0.0.1/udp/6001/quic", "/ip4/127.0.0.1/udp/6002/quic"},
+
+			expectedSuccessAddrs: []string{"/ip4/127.0.0.1/tcp/6001", "/ip4/127.0.0.1/udp/6001/quic", "/ip4/127.0.0.1/tcp/6002",
+				"/ip4/127.0.0.1/udp/6002/quic"},
+		},
+		"four tcp, four quic, three tcp and two quic fail -> so picks one tcp and two quic": {
+			listenAddrs: []string{"/ip4/127.0.0.1/tcp/7001", "/ip4/127.0.0.1/udp/7001/quic", "/ip4/127.0.0.1/udp/7002/quic"},
+
+			addrsParams: []string{"/ip4/127.0.0.1/tcp/7001", "/ip4/127.0.0.1/tcp/7002", "/ip4/127.0.0.1/tcp/7003", "/ip4/127.0.0.1/tcp/7004",
+				"/ip4/127.0.0.1/udp/7001/quic", "/ip4/127.0.0.1/udp/7002/quic", "/ip4/127.0.0.1/udp/7003/quic", "/ip4/127.0.0.1/udp/7004/quic"},
+
+			expectedSuccessAddrs: []string{"/ip4/127.0.0.1/tcp/7001", "/ip4/127.0.0.1/udp/7001/quic", "/ip4/127.0.0.1/udp/7002/quic"},
+
+			expectedFailedAddrs: []string{"/ip4/127.0.0.1/tcp/7002", "/ip4/127.0.0.1/tcp/7003", "/ip4/127.0.0.1/tcp/7004", "/ip4/127.0.0.1/udp/7003/quic",
+				"/ip4/127.0.0.1/udp/7004/quic"},
+		},
+
+		"four tcp, three quic, two tcp and two quic fail -> so picks two tcp and one quic": {
+			listenAddrs: []string{"/ip4/127.0.0.1/tcp/8001", "/ip4/127.0.0.1/tcp/8002", "/ip4/127.0.0.1/udp/8001/quic"},
+
+			addrsParams: []string{"/ip4/127.0.0.1/tcp/8001", "/ip4/127.0.0.1/tcp/8002", "/ip4/127.0.0.1/tcp/8003", "/ip4/127.0.0.1/tcp/8004",
+				"/ip4/127.0.0.1/udp/8001/quic", "/ip4/127.0.0.1/udp/8002/quic", "/ip4/127.0.0.1/udp/8003/quic"},
+
+			expectedSuccessAddrs: []string{"/ip4/127.0.0.1/tcp/8001", "/ip4/127.0.0.1/tcp/8002", "/ip4/127.0.0.1/udp/8001/quic"},
+
+			expectedFailedAddrs: []string{"/ip4/127.0.0.1/tcp/8003", "/ip4/127.0.0.1/tcp/8004", "/ip4/127.0.0.1/udp/8002/quic", "/ip4/127.0.0.1/udp/8003/quic"},
+		},
+	}
+
+	c := makeAutoNATConfig(ctx, t)
+	c.throttleGlobalMax = 1000
+	c.throttlePeerMax = 1000
+	_ = makeAutoNATService(ctx, t, c)
+
+	for name, tc := range tcs {
+		t.Run(name, func(t *testing.T) {
+			time.Sleep(100 * time.Millisecond)
+			require := require.New(t)
+
+			addrF := func() []ma.Multiaddr {
+				return multiAddrsFromString(tc.addrsParams)
+			}
+			hc, ac := makeAutoNATClientWithAddrFunc(ctx, t, addrF, swarmt.OptDialOnly)
+			defer hc.Close()
+			require.NoError(hc.Network().Listen(multiAddrsFromString(tc.listenAddrs)...))
+
+			time.Sleep(100 * time.Millisecond)
+
+			connect(t, c.host, hc)
+
+			conns := hc.Network().ConnsToPeer(c.host.ID())
+			localConnAddr := conns[0].LocalMultiaddr()
+
+			// remove the address with which the client dials the server from the list of failed addresses
+			success, failed, err := ac.DialBack(ctx, c.host.ID())
+			require.NoError(err)
+			for i, a := range failed {
+				if a.Equal(localConnAddr) {
+					failed[i] = failed[len(failed)-1]
+					failed = failed[:len(failed)-1]
+					break
+				}
+			}
+
+			multiAddrsEqual(require, multiAddrsFromString(tc.expectedSuccessAddrs), success)
+			multiAddrsEqual(require, multiAddrsFromString(tc.expectedFailedAddrs), failed)
+		})
+	}
+}
+
+func multiAddrsEqual(require *require.Assertions, expected []ma.Multiaddr, actual []ma.Multiaddr) {
+	require.Equalf(len(expected), len(actual), "expected: %v, actual: %v", expected, actual)
+
+	mastr1 := multiAddrsToString(expected)
+	mastr2 := multiAddrsToString(actual)
+	sort.Strings(mastr1)
+	sort.Strings(mastr2)
+	require.Equal(mastr1, mastr2)
+}
+
+func multiAddrsToString(mas []ma.Multiaddr) []string {
+	if len(mas) == 0 {
+		return nil
+	}
+	var addrs []string
+	for _, ma := range mas {
+		addrs = append(addrs, ma.String())
+	}
+	return addrs
+}
+
+func multiAddrsFromString(s []string) []ma.Multiaddr {
+	if len(s) == 0 {
+		return nil
+	}
+	var mas []ma.Multiaddr
+	for _, a := range s {
+		mas = append(mas, ma.StringCast(a))
+	}
+
+	return mas
 }

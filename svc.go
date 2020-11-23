@@ -10,7 +10,7 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p-core/transport"
 
 	pb "github.com/libp2p/go-libp2p-autonat/pb"
 
@@ -32,12 +32,14 @@ type autoNATService struct {
 	mx         sync.Mutex
 	reqs       map[peer.ID]int
 	globalReqs int
+
+	transports []transport.Transport
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
 func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) {
-	if c.dialer == nil {
-		return nil, errors.New("Cannot create NAT service without a network")
+	if len(c.transports) == 0 {
+		return nil, errors.New("Cannot create NAT service without transports")
 	}
 
 	as := &autoNATService{
@@ -46,6 +48,7 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 		reqs:   make(map[peer.ID]int),
 	}
 
+	as.transports = append(as.transports, c.transports...)
 	return as, nil
 }
 
@@ -167,21 +170,40 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	ctx, cancel := context.WithTimeout(as.ctx, as.config.dialTimeout)
 	defer cancel()
 
-	as.config.dialer.Peerstore().ClearAddrs(pi.ID)
+	successAddrs := make([]ma.Multiaddr, 0, len(pi.Addrs))
+	failedAddrs := make([]ma.Multiaddr, 0, len(pi.Addrs))
+	nSuccessDials := 0
 
-	as.config.dialer.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.TempAddrTTL)
-	conn, err := as.config.dialer.DialPeer(ctx, pi.ID)
-	if err != nil {
-		log.Debugf("error dialing %s: %s", pi.ID.Pretty(), err.Error())
-		// wait for the context to timeout to avoid leaking timing information
-		// this renders the service ineffective as a port scanner
-		<-ctx.Done()
-		return newDialResponseError(pb.Message_E_DIAL_ERROR, "dial failed")
+	// The maximum number of addresses we dial is bound by config.maxPeerAddresses as
+	// we don't pass more than that number of addresses to this function.
+ADDRLOOP:
+	for _, addr := range pi.Addrs {
+		for _, t := range as.transports {
+			if t.CanDial(addr) {
+				cc, err := t.Dial(ctx, addr, pi.ID)
+				if err == nil {
+					successAddrs = append(successAddrs, addr)
+
+					if err := cc.Close(); err != nil {
+						log.Warnf("failed to close opened connection: %w", err)
+					}
+
+					// we've seen enough successful dials, we are done.
+					nSuccessDials++
+					if nSuccessDials >= as.config.maxSuccessfulDials {
+						break ADDRLOOP
+					}
+				} else {
+					log.Debugf("error dialing %s on address %s: %s", pi.ID.Pretty(), addr, err.Error())
+					failedAddrs = append(failedAddrs, addr)
+				}
+				break
+			}
+		}
 	}
 
-	ra := conn.RemoteMultiaddr()
-	as.config.dialer.ClosePeer(pi.ID)
-	return newDialResponseOK(ra)
+	// TODO How to make this ineffective as a port scanner now ?
+	return newDialResponseOK(successAddrs, failedAddrs)
 }
 
 // Enable the autoNAT service if it is not running.

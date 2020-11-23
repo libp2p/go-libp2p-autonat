@@ -17,6 +17,7 @@ type dialPolicy struct {
 // The same logic is used when the autonat client is considering if
 // a remote peer is worth using as a server, and when the server is
 // considering if a requested client is worth dialing back.
+// skips relay addresses, private addresses and public addresses on the same network
 func (d *dialPolicy) skipDial(addr ma.Multiaddr) bool {
 	// skip relay addresses
 	_, err := addr.ValueForProtocol(ma.P_CIRCUIT)
@@ -37,7 +38,7 @@ func (d *dialPolicy) skipDial(addr ma.Multiaddr) bool {
 		return true
 	}
 
-	// Skip dialing addresses we believe are the local node's
+	// Skip dialing addresses we believe are on the same network as us
 	for _, localAddr := range d.host.Addrs() {
 		localIP, err := manet.ToIP(localAddr)
 		if err != nil {

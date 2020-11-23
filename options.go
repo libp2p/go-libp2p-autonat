@@ -6,17 +6,19 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/transport"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 // config holds configurable options for the autonat subsystem.
 type config struct {
 	host host.Host
 
-	addressFunc       AddrFunc
 	dialPolicy        dialPolicy
-	dialer            network.Network
+	transports        []transport.Transport
 	forceReachability bool
 	reachability      network.Reachability
+	dialAddrs         []ma.Multiaddr
 
 	// client
 	bootDelay          time.Duration
@@ -28,6 +30,7 @@ type config struct {
 	// server
 	dialTimeout         time.Duration
 	maxPeerAddresses    int
+	maxSuccessfulDials  int
 	throttleGlobalMax   int
 	throttlePeerMax     int
 	throttleResetPeriod time.Duration
@@ -43,6 +46,7 @@ var defaults = func(c *config) error {
 
 	c.dialTimeout = 15 * time.Second
 	c.maxPeerAddresses = 16
+	c.maxSuccessfulDials = 4
 	c.throttleGlobalMax = 30
 	c.throttlePeerMax = 3
 	c.throttleResetPeriod = 1 * time.Minute
@@ -51,17 +55,14 @@ var defaults = func(c *config) error {
 }
 
 // EnableService specifies that AutoNAT should be allowed to run a NAT service to help
-// other peers determine their own NAT status. The provided Network should not be the
-// default network/dialer of the host passed to `New`, as the NAT system will need to
-// make parallel connections, and as such will modify both the associated peerstore
-// and terminate connections of this dialer. The dialer provided
-// should be compatible (TCP/UDP) however with the transports of the libp2p network.
-func EnableService(dialer network.Network) Option {
+// other peers determine their own NAT status. The resulting NAT service
+// will dial back addresses supported by one of the given transports.
+func EnableService(transports ...transport.Transport) Option {
 	return func(c *config) error {
-		if dialer == c.host.Network() || dialer.Peerstore() == c.host.Peerstore() {
-			return errors.New("dialer should not be that of the host")
+		if len(transports) == 0 {
+			return errors.New("no transports given")
 		}
-		c.dialer = dialer
+		c.transports = append(c.transports, transports...)
 		return nil
 	}
 }
@@ -72,20 +73,6 @@ func WithReachability(reachability network.Reachability) Option {
 	return func(c *config) error {
 		c.forceReachability = true
 		c.reachability = reachability
-		return nil
-	}
-}
-
-// UsingAddresses allows overriding which Addresses the AutoNAT client believes
-// are "its own". Useful for testing, or for more exotic port-forwarding
-// scenarios where the host may be listening on different ports than it wants
-// to externally advertise or verify connectability on.
-func UsingAddresses(addrFunc AddrFunc) Option {
-	return func(c *config) error {
-		if addrFunc == nil {
-			return errors.New("invalid address function supplied")
-		}
-		c.addressFunc = addrFunc
 		return nil
 	}
 }

@@ -22,22 +22,18 @@ type Error struct {
 
 // NewAutoNATClient creates a fresh instance of an AutoNATClient
 // If addrFunc is nil, h.Addrs will be used
-func NewAutoNATClient(h host.Host, addrFunc AddrFunc) Client {
-	if addrFunc == nil {
-		addrFunc = h.Addrs
-	}
-	return &client{h: h, addrFunc: addrFunc}
+func NewAutoNATClient(h host.Host) Client {
+	return &client{h: h}
 }
 
 type client struct {
-	h        host.Host
-	addrFunc AddrFunc
+	h host.Host
 }
 
-func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) {
+func (c *client) DialBack(ctx context.Context, p peer.ID, addrsToDial []ma.Multiaddr) (success, failed []ma.Multiaddr, observer ma.Multiaddr, err error) {
 	s, err := c.h.NewStream(ctx, p, AutoNATProto)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 	// Might as well just reset the stream. Once we get to this point, we
 	// don't care about being nice.
@@ -46,32 +42,45 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 	r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
 	w := protoio.NewDelimitedWriter(s)
 
-	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: c.addrFunc()})
+	req := newDialMessage(peer.AddrInfo{ID: c.h.ID(), Addrs: addrsToDial})
 	err = w.WriteMsg(req)
 	if err != nil {
 		s.Reset()
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	var res pb.Message
 	err = r.ReadMsg(&res)
 	if err != nil {
 		s.Reset()
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	if res.GetType() != pb.Message_DIAL_RESPONSE {
-		return nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
+		return nil, nil, nil, fmt.Errorf("Unexpected response: %s", res.GetType().String())
 	}
 
-	status := res.GetDialResponse().GetStatus()
+	resp := res.GetDialResponse()
+	status := resp.GetStatus()
 	switch status {
 	case pb.Message_OK:
-		addr := res.GetDialResponse().GetAddr()
-		return ma.NewMultiaddrBytes(addr)
+		success = make([]ma.Multiaddr, 0, len(resp.SuccessAddrs))
+		for _, ab := range resp.SuccessAddrs {
+			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
+				success = append(success, a)
+			}
+		}
+
+		failed = make([]ma.Multiaddr, 0, len(resp.FailedAddrs))
+		for _, ab := range resp.FailedAddrs {
+			if a, err := ma.NewMultiaddrBytes(ab); err == nil {
+				failed = append(failed, a)
+			}
+		}
+		return success, failed, s.Conn().RemoteMultiaddr(), nil
 
 	default:
-		return nil, Error{Status: status, Text: res.GetDialResponse().GetStatusText()}
+		return nil, nil, nil, Error{Status: status, Text: resp.GetStatusText()}
 	}
 }
 
