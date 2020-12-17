@@ -19,6 +19,8 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 )
 
+var streamReadTimeout = 60 * time.Second
+
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
 	ctx          context.Context
@@ -50,6 +52,8 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 }
 
 func (as *autoNATService) handleStream(s network.Stream) {
+	s.SetReadDeadline(time.Now().Add(streamReadTimeout))
+
 	defer s.Close()
 
 	pid := s.Conn().RemotePeer()
