@@ -3,8 +3,10 @@ package autonat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,6 +117,7 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		obsHost, _ = manet.ToIP(obsaddr)
 	}
 
+	obscodename, obsport, _ := as.extractPort(obsaddr)
 	for _, maddr := range mpi.GetAddrs() {
 		addr, err := ma.NewMultiaddrBytes(maddr)
 		if err != nil {
@@ -123,7 +126,18 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		}
 
 		if as.config.dialPolicy.skipDial(addr) {
-			continue
+			if manet.IsPrivateAddr(addr) {
+				addrcodename, addrport, err := as.extractPort(addr)
+				if err == nil && addrcodename == obscodename && addrport != obsport { //make a new address
+					obsportstr := fmt.Sprintf("/%s/%s", obscodename, obsport)
+					addrportstr := fmt.Sprintf("/%s/%s", addrcodename, addrport)
+					addr, err = ma.NewMultiaddr(strings.Replace(obsaddr.String(), obsportstr, addrportstr, -1)) //replace the private addr
+				} else {
+					continue
+				}
+			} else {
+				continue
+			}
 		}
 
 		if ip, err := manet.ToIP(addr); err != nil || !obsHost.Equal(ip) {
@@ -227,4 +241,17 @@ func (as *autoNATService) background(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (as *autoNATService) extractPort(m ma.Multiaddr) (name string, port string, err error) {
+	for _, p := range m.Protocols() {
+		if p.Code == ma.P_TCP || p.Code == ma.P_UDP {
+			v, err := m.ValueForProtocol(p.Code)
+			if err != nil {
+				return "", "", err
+			}
+			return p.Name, v, nil
+		}
+	}
+	return "", "", errors.New("can't extract port")
 }
