@@ -1,12 +1,11 @@
 package autonat
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -117,7 +116,6 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		obsHost, _ = manet.ToIP(obsaddr)
 	}
 
-	obscodename, obsport, _ := as.extractPort(obsaddr)
 	for _, maddr := range mpi.GetAddrs() {
 		addr, err := ma.NewMultiaddrBytes(maddr)
 		if err != nil {
@@ -126,18 +124,11 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		}
 
 		if as.config.dialPolicy.skipDial(addr) {
-			if manet.IsPrivateAddr(addr) {
-				addrcodename, addrport, err := as.extractPort(addr)
-				if err == nil && addrcodename == obscodename && addrport != obsport { //make a new address
-					obsportstr := fmt.Sprintf("/%s/%s", obscodename, obsport)
-					addrportstr := fmt.Sprintf("/%s/%s", addrcodename, addrport)
-					addr, err = ma.NewMultiaddr(strings.Replace(obsaddr.String(), obsportstr, addrportstr, -1)) //replace the private addr
-				} else {
-					continue
-				}
-			} else {
-				continue
+			succ, newobsaddr := patchObsaddr(addr, obsaddr)
+			if succ == true {
+				addr = newobsaddr
 			}
+			continue
 		}
 
 		if ip, err := manet.ToIP(addr); err != nil || !obsHost.Equal(ip) {
@@ -243,15 +234,62 @@ func (as *autoNATService) background(ctx context.Context) {
 	}
 }
 
-func (as *autoNATService) extractPort(m ma.Multiaddr) (name string, port string, err error) {
-	for _, p := range m.Protocols() {
-		if p.Code == ma.P_TCP || p.Code == ma.P_UDP {
-			v, err := m.ValueForProtocol(p.Code)
-			if err != nil {
-				return "", "", err
+//replace obsaddr's port number with the port number of a
+func patchObsaddr(a ma.Multiaddr, obsaddr ma.Multiaddr) (bool, ma.Multiaddr) {
+	if a == nil || obsaddr == nil {
+		return false, nil
+	}
+	var rawport []byte
+	var code int
+	var newc ma.Component
+	isValid := false
+	ma.ForEach(a, func(c ma.Component) bool {
+		switch c.Protocol().Code {
+		case ma.P_UDP, ma.P_TCP:
+			code = c.Protocol().Code
+			rawport = c.RawValue()
+			newc = c
+			return !isValid
+		case ma.P_IP4, ma.P_IP6:
+			isValid = true
+		}
+		return true
+	})
+
+	if isValid == true && len(rawport) > 0 {
+		obsbytes := obsaddr.Bytes()
+		obsoffset := 0
+		isObsValid := false
+		isReplaced := false
+		var buffer bytes.Buffer
+		ma.ForEach(obsaddr, func(c ma.Component) bool {
+			switch c.Protocol().Code {
+			case ma.P_UDP, ma.P_TCP:
+				if code == c.Protocol().Code && isObsValid == true { //obsaddr has the same type protocol, and we can replace it.
+					if bytes.Compare(rawport, c.RawValue()) != 0 {
+						buffer.Write(obsbytes[:obsoffset])
+						buffer.Write(newc.Bytes())
+						tail := obsoffset + len(c.Bytes())
+						if len(obsbytes)-tail > 0 {
+							buffer.Write(obsbytes[tail:])
+						}
+						isReplaced = true
+					}
+					return false
+				}
+			case ma.P_IP4, ma.P_IP6:
+				isObsValid = true
 			}
-			return p.Name, v, nil
+			obsoffset += len(c.Bytes())
+			return true
+		})
+		if isReplaced == true {
+			newobsaddr, err := ma.NewMultiaddrBytes(buffer.Bytes())
+			if err != nil {
+				return false, nil
+			}
+			return true, newobsaddr
 		}
 	}
-	return "", "", errors.New("can't extract port")
+	return false, nil
 }
