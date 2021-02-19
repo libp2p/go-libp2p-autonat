@@ -127,8 +127,9 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			succ, newobsaddr := patchObsaddr(addr, obsaddr)
 			if succ == true {
 				addr = newobsaddr
+			} else {
+				continue
 			}
-			continue
 		}
 
 		if ip, err := manet.ToIP(addr); err != nil || !obsHost.Equal(ip) {
