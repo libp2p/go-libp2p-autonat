@@ -212,9 +212,9 @@ func TestMultiaddrPatchSuccess(t *testing.T) {
 	m1, _ := ma.NewMultiaddr("/ip4/192.168.0.10/tcp/64555")
 	m2, _ := ma.NewMultiaddr("/ip4/72.53.243.114/tcp/19005")
 	correctm2, _ := ma.NewMultiaddr("/ip4/72.53.243.114/tcp/64555")
-	succ, newm2 := patchObsaddr(m1, m2)
-	if succ == false {
-		t.Fatalf("patchObsaddr failed, was %s", m2)
+	err, newm2 := patchObsaddr(m1, m2)
+	if err != nil {
+		t.Fatalf("patchObsaddr failed, was %s error %s", m2, err)
 	}
 	if newm2.Equal(correctm2) == false {
 		t.Fatalf("patchObsaddr success, but new obsaddr is %s should be %s", newm2, correctm2)
@@ -224,8 +224,8 @@ func TestMultiaddrPatchSuccess(t *testing.T) {
 func TestMultiaddrPatchError(t *testing.T) {
 	m1, _ := ma.NewMultiaddr("/ip4/192.168.0.10/tcp/64555")
 	m2, _ := ma.NewMultiaddr("/ip4/72.53.243.114/udp/19005")
-	succ, newm2 := patchObsaddr(m1, m2)
-	if succ == true {
-		t.Fatalf("this address should not be patch, new address %s", newm2)
+	err, newm2 := patchObsaddr(m1, m2)
+	if err == nil {
+		t.Fatalf("this address should not be patched, new address: %s", newm2)
 	}
 }

@@ -124,8 +124,8 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 		}
 
 		if as.config.dialPolicy.skipDial(addr) {
-			succ, newobsaddr := patchObsaddr(addr, obsaddr)
-			if succ == true {
+			err, newobsaddr := patchObsaddr(addr, obsaddr)
+			if err == nil {
 				addr = newobsaddr
 			} else {
 				continue
@@ -235,16 +235,16 @@ func (as *autoNATService) background(ctx context.Context) {
 	}
 }
 
-// patchObsaddr replaces obsaddr's port number with the port number of `a`
-func patchObsaddr(a, obsaddr ma.Multiaddr) (bool, ma.Multiaddr) {
-	if a == nil || obsaddr == nil {
-		return false, nil
+// patchObsaddr replaces obsaddr's port number with the port number of `localaddr`
+func patchObsaddr(localaddr, obsaddr ma.Multiaddr) (error, ma.Multiaddr) {
+	if localaddr == nil || obsaddr == nil {
+		return errors.New("localaddr and obsaddr can't be nil"), nil
 	}
 	var rawport []byte
 	var code int
 	var newc ma.Component
 	isValid := false
-	ma.ForEach(a, func(c ma.Component) bool {
+	ma.ForEach(localaddr, func(c ma.Component) bool {
 		switch c.Protocol().Code {
 		case ma.P_UDP, ma.P_TCP:
 			code = c.Protocol().Code
@@ -286,11 +286,9 @@ func patchObsaddr(a, obsaddr ma.Multiaddr) (bool, ma.Multiaddr) {
 		})
 		if isReplaced == true {
 			newobsaddr, err := ma.NewMultiaddrBytes(buffer.Bytes())
-			if err != nil {
-				return false, nil
-			}
-			return true, newobsaddr
+			return err, newobsaddr
 		}
 	}
-	return false, nil
+
+	return errors.New("only same protocol address can be patched."), nil
 }
