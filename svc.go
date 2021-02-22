@@ -235,8 +235,8 @@ func (as *autoNATService) background(ctx context.Context) {
 	}
 }
 
-//replace obsaddr's port number with the port number of a
-func patchObsaddr(a ma.Multiaddr, obsaddr ma.Multiaddr) (bool, ma.Multiaddr) {
+// patchObsaddr replaces obsaddr's port number with the port number of `a`
+func patchObsaddr(a, obsaddr ma.Multiaddr) (bool, ma.Multiaddr) {
 	if a == nil || obsaddr == nil {
 		return false, nil
 	}
