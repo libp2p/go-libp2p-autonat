@@ -1,11 +1,9 @@
 package autonat
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"math/rand"
-	"net"
 	"sync"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 
 	"github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
 )
 
 // AutoNATService provides NAT autodetection services to other peers
@@ -108,13 +105,26 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 	addrs := make([]ma.Multiaddr, 0, as.config.maxPeerAddresses)
 	seen := make(map[string]struct{})
 
-	// add observed addr to the list of addresses to dial
-	var obsHost net.IP
-	if !as.config.dialPolicy.skipDial(obsaddr) {
-		addrs = append(addrs, obsaddr)
-		seen[obsaddr.String()] = struct{}{}
-		obsHost, _ = manet.ToIP(obsaddr)
+	// Don't even try to dial peers with blocked remote addresses. In order to dial a peer, we
+	// need to know their public IP address, and it needs to be different from our public IP
+	// address.
+	if as.config.dialPolicy.skipDial(obsaddr) {
+		return newDialResponseError(pb.Message_E_DIAL_ERROR, "refusing to dial peer with blocked observed address")
 	}
+
+	// Determine the peer's IP address.
+	hostIP, _ := ma.SplitFirst(obsaddr)
+	switch hostIP.Protocol().Code {
+	case ma.P_IP4, ma.P_IP6:
+	default:
+		// This shouldn't be possible as we should skip all addresses that don't include
+		// public IP addresses.
+		return newDialResponseError(pb.Message_E_INTERNAL_ERROR, "expected an IP address")
+	}
+
+	// add observed addr to the list of addresses to dial
+	addrs = append(addrs, obsaddr)
+	seen[obsaddr.String()] = struct{}{}
 
 	for _, maddr := range mpi.GetAddrs() {
 		addr, err := ma.NewMultiaddrBytes(maddr)
@@ -123,16 +133,25 @@ func (as *autoNATService) handleDial(p peer.ID, obsaddr ma.Multiaddr, mpi *pb.Me
 			continue
 		}
 
-		if as.config.dialPolicy.skipDial(addr) {
-			err, newobsaddr := patchObsaddr(addr, obsaddr)
-			if err == nil {
-				addr = newobsaddr
-			} else {
+		// For security reasons, we _only_ dial the observed IP address.
+		// Replace other IP addresses with the observed one so we can still try the
+		// requested ports/transports.
+		if ip, rest := ma.SplitFirst(addr); !ip.Equal(hostIP) {
+			// Make sure it's an IP address
+			switch ip.Protocol().Code {
+			case ma.P_IP4, ma.P_IP6:
+			default:
 				continue
+			}
+			addr = hostIP
+			if rest != nil {
+				addr = addr.Encapsulate(rest)
 			}
 		}
 
-		if ip, err := manet.ToIP(addr); err != nil || !obsHost.Equal(ip) {
+		// Make sure we're willing to dial the rest of the address (e.g., not a circuit
+		// address).
+		if as.config.dialPolicy.skipDial(addr) {
 			continue
 		}
 
@@ -233,62 +252,4 @@ func (as *autoNATService) background(ctx context.Context) {
 			return
 		}
 	}
-}
-
-// patchObsaddr replaces obsaddr's port number with the port number of `localaddr`
-func patchObsaddr(localaddr, obsaddr ma.Multiaddr) (error, ma.Multiaddr) {
-	if localaddr == nil || obsaddr == nil {
-		return errors.New("localaddr and obsaddr can't be nil"), nil
-	}
-	var rawport []byte
-	var code int
-	var newc ma.Component
-	isValid := false
-	ma.ForEach(localaddr, func(c ma.Component) bool {
-		switch c.Protocol().Code {
-		case ma.P_UDP, ma.P_TCP:
-			code = c.Protocol().Code
-			rawport = c.RawValue()
-			newc = c
-			return !isValid
-		case ma.P_IP4, ma.P_IP6:
-			isValid = true
-		}
-		return true
-	})
-
-	if isValid == true && len(rawport) > 0 {
-		obsbytes := obsaddr.Bytes()
-		obsoffset := 0
-		isObsValid := false
-		isReplaced := false
-		var buffer bytes.Buffer
-		ma.ForEach(obsaddr, func(c ma.Component) bool {
-			switch c.Protocol().Code {
-			case ma.P_UDP, ma.P_TCP:
-				if code == c.Protocol().Code && isObsValid == true { //obsaddr has the same type protocol, and we can replace it.
-					if bytes.Compare(rawport, c.RawValue()) != 0 {
-						buffer.Write(obsbytes[:obsoffset])
-						buffer.Write(newc.Bytes())
-						tail := obsoffset + len(c.Bytes())
-						if len(obsbytes)-tail > 0 {
-							buffer.Write(obsbytes[tail:])
-						}
-						isReplaced = true
-					}
-					return false
-				}
-			case ma.P_IP4, ma.P_IP6:
-				isObsValid = true
-			}
-			obsoffset += len(c.Bytes())
-			return true
-		})
-		if isReplaced == true {
-			newobsaddr, err := ma.NewMultiaddrBytes(buffer.Bytes())
-			return err, newobsaddr
-		}
-	}
-
-	return errors.New("only same protocol address can be patched."), nil
 }
