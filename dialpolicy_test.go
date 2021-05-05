@@ -43,9 +43,7 @@ type mockL struct {
 }
 
 func (l *mockL) Accept() (transport.CapableConn, error) {
-	select {
-	case <-l.ctx.Done():
-	}
+	<-l.ctx.Done()
 	return nil, errors.New("expected in mocked test")
 }
 func (l *mockL) Close() error                   { return nil }

@@ -28,7 +28,6 @@ type autoNATService struct {
 	config *config
 
 	// rate limiter
-	running    uint32
 	mx         sync.Mutex
 	reqs       map[peer.ID]int
 	globalReqs int
@@ -37,7 +36,7 @@ type autoNATService struct {
 // NewAutoNATService creates a new AutoNATService instance attached to a host
 func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) {
 	if c.dialer == nil {
-		return nil, errors.New("Cannot create NAT service without a network")
+		return nil, errors.New("cannot create NAT service without a network")
 	}
 
 	as := &autoNATService{
