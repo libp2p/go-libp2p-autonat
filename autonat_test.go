@@ -234,7 +234,7 @@ func TestAutoNATObservationRecording(t *testing.T) {
 	}
 
 	select {
-	case _ = <-s.Out():
+	case <-s.Out():
 		t.Fatal("not expecting a public reachability event")
 	default:
 		//expected
