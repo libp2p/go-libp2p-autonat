@@ -54,8 +54,8 @@ func (c *client) DialBack(ctx context.Context, p peer.ID) (ma.Multiaddr, error) 
 		s.Reset()
 		return nil, err
 	}
-
 	if res.GetType() != pb.Message_DIAL_RESPONSE {
+		s.Reset()
 		return nil, fmt.Errorf("unexpected response: %s", res.GetType().String())
 	}
 
