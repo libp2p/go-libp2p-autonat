@@ -7,17 +7,16 @@ import (
 	"sync"
 	"time"
 
+	pb "github.com/libp2p/go-libp2p-autonat/pb"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
-
-	pb "github.com/libp2p/go-libp2p-autonat/pb"
 
 	"github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-var streamReadTimeout = 60 * time.Second
+var streamTimeout = 60 * time.Second
 
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
@@ -49,8 +48,7 @@ func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) 
 }
 
 func (as *autoNATService) handleStream(s network.Stream) {
-	s.SetReadDeadline(time.Now().Add(streamReadTimeout))
-
+	s.SetDeadline(time.Now().Add(streamTimeout))
 	defer s.Close()
 
 	pid := s.Conn().RemotePeer()
