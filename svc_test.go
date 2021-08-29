@@ -24,8 +24,8 @@ func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
 	return &c
 }
 
-func makeAutoNATService(ctx context.Context, t *testing.T, c *config) *autoNATService {
-	as, err := newAutoNATService(ctx, c)
+func makeAutoNATService(t *testing.T, c *config) *autoNATService {
+	as, err := newAutoNATService(c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestAutoNATServiceDialError(t *testing.T) {
 	c := makeAutoNATConfig(ctx, t)
 	c.dialTimeout = 1 * time.Second
 	c.dialPolicy.allowSelfDials = false
-	_ = makeAutoNATService(ctx, t, c)
+	_ = makeAutoNATService(t, c)
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
 
@@ -67,7 +67,7 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	defer cancel()
 
 	c := makeAutoNATConfig(ctx, t)
-	_ = makeAutoNATService(ctx, t, c)
+	_ = makeAutoNATService(t, c)
 
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
@@ -87,7 +87,7 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	c.throttleResetPeriod = time.Second
 	c.throttleResetJitter = 0
 	c.throttlePeerMax = 1
-	_ = makeAutoNATService(ctx, t, c)
+	_ = makeAutoNATService(t, c)
 
 	hc, ac := makeAutoNATClient(ctx, t)
 	connect(t, c.host, hc)
@@ -124,7 +124,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	c.throttleResetJitter = 0
 	c.throttlePeerMax = 1
 	c.throttleGlobalMax = 5
-	_ = makeAutoNATService(ctx, t, c)
+	_ = makeAutoNATService(t, c)
 
 	hs := c.host
 
@@ -157,7 +157,7 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	c.throttleResetPeriod = 100 * time.Millisecond
 	c.throttleResetJitter = 100 * time.Millisecond
 	c.throttleGlobalMax = 1
-	svc := makeAutoNATService(ctx, t, c)
+	svc := makeAutoNATService(t, c)
 	svc.mx.Lock()
 	svc.globalReqs = 1
 	svc.mx.Unlock()
@@ -178,7 +178,7 @@ func TestAutoNATServiceStartup(t *testing.T) {
 
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	an, err := New(ctx, h, EnableService(dh.Network()))
+	an, err := New(h, EnableService(dh.Network()))
 	an.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	if err != nil {
 		t.Fatal(err)

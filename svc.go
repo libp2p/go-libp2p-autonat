@@ -20,9 +20,10 @@ var streamTimeout = 60 * time.Second
 
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
-	ctx          context.Context
-	instance     context.CancelFunc
-	instanceLock sync.Mutex
+	instanceLock      sync.Mutex
+	ctx               context.Context
+	instance          context.CancelFunc
+	backgroundRunning chan struct{} // closed when background exits
 
 	config *config
 
@@ -33,13 +34,13 @@ type autoNATService struct {
 }
 
 // NewAutoNATService creates a new AutoNATService instance attached to a host
-func newAutoNATService(ctx context.Context, c *config) (*autoNATService, error) {
+func newAutoNATService(c *config) (*autoNATService, error) {
 	if c.dialer == nil {
 		return nil, errors.New("cannot create NAT service without a network")
 	}
 
 	as := &autoNATService{
-		ctx:    ctx,
+		ctx:    context.Background(),
 		config: c,
 		reqs:   make(map[peer.ID]int),
 	}
@@ -217,10 +218,11 @@ func (as *autoNATService) Enable() {
 	if as.instance != nil {
 		return
 	}
-	inst, cncl := context.WithCancel(as.ctx)
-	as.instance = cncl
+	ctx, cancel := context.WithCancel(as.ctx)
+	as.instance = cancel
+	as.backgroundRunning = make(chan struct{})
 
-	go as.background(inst)
+	go as.background(ctx)
 }
 
 // Disable the autoNAT service if it is running.
@@ -230,10 +232,12 @@ func (as *autoNATService) Disable() {
 	if as.instance != nil {
 		as.instance()
 		as.instance = nil
+		<-as.backgroundRunning
 	}
 }
 
 func (as *autoNATService) background(ctx context.Context) {
+	defer close(as.backgroundRunning)
 	as.config.host.SetStreamHandler(AutoNATProto, as.handleStream)
 
 	timer := time.NewTimer(as.config.throttleResetPeriod)
