@@ -433,7 +433,9 @@ func (as *AmbientAutoNAT) getPeerToProbe() peer.ID {
 
 func (as *AmbientAutoNAT) Close() error {
 	as.ctxCancel()
-	as.service.Disable()
+	if as.service != nil {
+		as.service.Disable()
+	}
 	<-as.backgroundRunning
 	return nil
 }
@@ -456,4 +458,11 @@ func (s *StaticAutoNAT) PublicAddr() (ma.Multiaddr, error) {
 		return nil, errors.New("NAT status is not public")
 	}
 	return nil, errors.New("no available address")
+}
+
+func (s *StaticAutoNAT) Close() error {
+	if s.service != nil {
+		s.service.Disable()
+	}
+	return nil
 }
