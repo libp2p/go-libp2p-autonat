@@ -21,7 +21,6 @@ var streamTimeout = 60 * time.Second
 // AutoNATService provides NAT autodetection services to other peers
 type autoNATService struct {
 	instanceLock      sync.Mutex
-	ctx               context.Context
 	instance          context.CancelFunc
 	backgroundRunning chan struct{} // closed when background exits
 
@@ -38,14 +37,10 @@ func newAutoNATService(c *config) (*autoNATService, error) {
 	if c.dialer == nil {
 		return nil, errors.New("cannot create NAT service without a network")
 	}
-
-	as := &autoNATService{
-		ctx:    context.Background(),
+	return &autoNATService{
 		config: c,
 		reqs:   make(map[peer.ID]int),
-	}
-
-	return as, nil
+	}, nil
 }
 
 func (as *autoNATService) handleStream(s network.Stream) {
@@ -191,7 +186,7 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	as.globalReqs++
 	as.mx.Unlock()
 
-	ctx, cancel := context.WithTimeout(as.ctx, as.config.dialTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), as.config.dialTimeout)
 	defer cancel()
 
 	as.config.dialer.Peerstore().ClearAddrs(pi.ID)
@@ -218,7 +213,7 @@ func (as *autoNATService) Enable() {
 	if as.instance != nil {
 		return
 	}
-	ctx, cancel := context.WithCancel(as.ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	as.instance = cancel
 	as.backgroundRunning = make(chan struct{})
 
