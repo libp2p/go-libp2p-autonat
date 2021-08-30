@@ -55,7 +55,7 @@ func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, A
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
-	a, _ := New(ctx, h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
+	a, _ := New(h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
 	a.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	a.(*AmbientAutoNAT).config.throttlePeerPeriod = 100 * time.Millisecond
 	return h, a
@@ -279,7 +279,7 @@ func TestStaticNat(t *testing.T) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
 	s, _ := h.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
 
-	nat, err := New(ctx, h, WithReachability(network.ReachabilityPrivate))
+	nat, err := New(h, WithReachability(network.ReachabilityPrivate))
 	if err != nil {
 		t.Fatal(err)
 	}

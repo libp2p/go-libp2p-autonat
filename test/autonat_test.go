@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // This separate testing package helps to resolve a circular dependency potentially
 // being created between libp2p and libp2p-autonat
 package autonat_test
@@ -31,7 +34,7 @@ func TestAutonatRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := autonat.New(ctx, service, autonat.EnableService(dialback.Network())); err != nil {
+	if _, err := autonat.New(service, autonat.EnableService(dialback.Network())); err != nil {
 		t.Fatal(err)
 	}
 
