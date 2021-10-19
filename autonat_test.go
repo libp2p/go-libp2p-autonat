@@ -20,13 +20,13 @@ import (
 
 // these are mock service implementations for testing
 func makeAutoNATServicePrivate(ctx context.Context, t *testing.T) host.Host {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
 	return h
 }
 
 func makeAutoNATServicePublic(ctx context.Context, t *testing.T) host.Host {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.SetStreamHandler(AutoNATProto, sayAutoNATPublic)
 	return h
 }
@@ -52,7 +52,7 @@ func sayAutoNATPublic(s network.Stream) {
 }
 
 func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, AutoNAT) {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
 	a, _ := New(h, WithSchedule(100*time.Millisecond, time.Second), WithoutStartupDelay())
@@ -94,7 +94,10 @@ func TestAutoNATPrivate(t *testing.T) {
 	defer cancel()
 
 	hs := makeAutoNATServicePrivate(ctx, t)
+	defer hs.Close()
 	hc, an := makeAutoNAT(ctx, t, hs)
+	defer hc.Close()
+	defer an.Close()
 
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
@@ -123,7 +126,10 @@ func TestAutoNATPublic(t *testing.T) {
 	defer cancel()
 
 	hs := makeAutoNATServicePublic(ctx, t)
+	defer hs.Close()
 	hc, an := makeAutoNAT(ctx, t, hs)
+	defer hc.Close()
+	defer an.Close()
 
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
@@ -152,7 +158,10 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	defer cancel()
 
 	hs := makeAutoNATServicePublic(ctx, t)
+	defer hs.Close()
 	hc, an := makeAutoNAT(ctx, t, hs)
+	defer hc.Close()
+	defer an.Close()
 
 	// subscribe to AutoNat events
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
@@ -195,7 +204,10 @@ func TestAutoNATIncomingEvents(t *testing.T) {
 	defer cancel()
 
 	hs := makeAutoNATServicePrivate(ctx, t)
+	defer hs.Close()
 	hc, ani := makeAutoNAT(ctx, t, hs)
+	defer hc.Close()
+	defer ani.Close()
 	an := ani.(*AmbientAutoNAT)
 
 	status := an.Status()
@@ -219,7 +231,10 @@ func TestAutoNATObservationRecording(t *testing.T) {
 	defer cancel()
 
 	hs := makeAutoNATServicePublic(ctx, t)
+	defer hs.Close()
 	hc, ani := makeAutoNAT(ctx, t, hs)
+	defer hc.Close()
+	defer ani.Close()
 	an := ani.(*AmbientAutoNAT)
 
 	s, err := hc.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
@@ -273,10 +288,11 @@ func TestAutoNATObservationRecording(t *testing.T) {
 }
 
 func TestStaticNat(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h.Close()
 	s, _ := h.EventBus().Subscribe(&event.EvtLocalReachabilityChanged{})
 
 	nat, err := New(h, WithReachability(network.ReachabilityPrivate))
