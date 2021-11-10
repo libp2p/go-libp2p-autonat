@@ -15,8 +15,8 @@ import (
 )
 
 func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	dh := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	c := config{host: h, dialer: dh.Network()}
 	_ = defaults(&c)
 	c.forceReachability = true
@@ -35,7 +35,7 @@ func makeAutoNATService(t *testing.T, c *config) *autoNATService {
 }
 
 func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, Client) {
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	cli := NewAutoNATClient(h, nil)
 	return h, cli
 }
@@ -46,10 +46,14 @@ func TestAutoNATServiceDialError(t *testing.T) {
 	defer cancel()
 
 	c := makeAutoNATConfig(ctx, t)
+	defer c.host.Close()
+	defer c.dialer.Close()
+
 	c.dialTimeout = 1 * time.Second
 	c.dialPolicy.allowSelfDials = false
 	_ = makeAutoNATService(t, c)
 	hc, ac := makeAutoNATClient(ctx, t)
+	defer hc.Close()
 	connect(t, c.host, hc)
 
 	_, err := ac.DialBack(ctx, c.host.ID())
@@ -67,9 +71,13 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	defer cancel()
 
 	c := makeAutoNATConfig(ctx, t)
+	defer c.host.Close()
+	defer c.dialer.Close()
+
 	_ = makeAutoNATService(t, c)
 
 	hc, ac := makeAutoNATClient(ctx, t)
+	defer hc.Close()
 	connect(t, c.host, hc)
 
 	_, err := ac.DialBack(ctx, c.host.ID())
@@ -83,6 +91,9 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	defer cancel()
 
 	c := makeAutoNATConfig(ctx, t)
+	defer c.host.Close()
+	defer c.dialer.Close()
+
 	c.dialTimeout = 1 * time.Second
 	c.throttleResetPeriod = time.Second
 	c.throttleResetJitter = 0
@@ -90,6 +101,7 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	_ = makeAutoNATService(t, c)
 
 	hc, ac := makeAutoNATClient(ctx, t)
+	defer hc.Close()
 	connect(t, c.host, hc)
 
 	_, err := ac.DialBack(ctx, c.host.ID())
@@ -119,6 +131,9 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	defer cancel()
 
 	c := makeAutoNATConfig(ctx, t)
+	defer c.host.Close()
+	defer c.dialer.Close()
+
 	c.dialTimeout = time.Second
 	c.throttleResetPeriod = 10 * time.Second
 	c.throttleResetJitter = 0
@@ -139,6 +154,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	}
 
 	hc, ac := makeAutoNATClient(ctx, t)
+	defer hc.Close()
 	connect(t, hs, hc)
 	_, err := ac.DialBack(ctx, hs.ID())
 	if err == nil {
@@ -154,6 +170,9 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := makeAutoNATConfig(ctx, t)
+	defer c.host.Close()
+	defer c.dialer.Close()
+
 	c.throttleResetPeriod = 100 * time.Millisecond
 	c.throttleResetJitter = 100 * time.Millisecond
 	c.throttleGlobalMax = 1
@@ -176,8 +195,10 @@ func TestAutoNATServiceStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	h := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
-	dh := bhost.NewBlankHost(swarmt.GenSwarm(t, ctx))
+	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer h.Close()
+	dh := bhost.NewBlankHost(swarmt.GenSwarm(t))
+	defer dh.Close()
 	an, err := New(h, EnableService(dh.Network()))
 	an.(*AmbientAutoNAT).config.dialPolicy.allowSelfDials = true
 	if err != nil {

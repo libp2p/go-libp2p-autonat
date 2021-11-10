@@ -54,7 +54,7 @@ func TestSkipDial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := swarmt.GenSwarm(t, ctx)
+	s := swarmt.GenSwarm(t)
 	d := dialPolicy{host: blankhost.NewBlankHost(s)}
 	if d.skipDial(makeMA("/ip4/8.8.8.8")) != false {
 		t.Fatal("failed dialing a valid public addr")
@@ -82,7 +82,7 @@ func TestSkipPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := swarmt.GenSwarm(t, ctx)
+	s := swarmt.GenSwarm(t)
 	d := dialPolicy{host: blankhost.NewBlankHost(s)}
 	if d.skipPeer([]multiaddr.Multiaddr{makeMA("/ip4/8.8.8.8")}) != false {
 		t.Fatal("failed dialing a valid public addr")
@@ -115,7 +115,7 @@ func TestSkipLocalPeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s := swarmt.GenSwarm(t, ctx)
+	s := swarmt.GenSwarm(t)
 	d := dialPolicy{host: blankhost.NewBlankHost(s)}
 	s.AddTransport(&mockT{ctx, makeMA("/ip4/192.168.0.1")})
 	err := s.AddListenAddr(makeMA("/ip4/192.168.0.1"))
