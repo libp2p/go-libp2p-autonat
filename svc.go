@@ -192,6 +192,12 @@ func (as *autoNATService) doDial(pi peer.AddrInfo) *pb.Message_DialResponse {
 	as.config.dialer.Peerstore().ClearAddrs(pi.ID)
 
 	as.config.dialer.Peerstore().AddAddrs(pi.ID, pi.Addrs, peerstore.TempAddrTTL)
+
+	defer func() {
+		as.config.dialer.Peerstore().ClearAddrs(pi.ID)
+		as.config.dialer.Peerstore().RemovePeer(pi.ID)
+	}()
+
 	conn, err := as.config.dialer.DialPeer(ctx, pi.ID)
 	if err != nil {
 		log.Debugf("error dialing %s: %s", pi.ID.Pretty(), err.Error())
