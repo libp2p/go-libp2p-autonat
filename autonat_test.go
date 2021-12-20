@@ -16,16 +16,17 @@ import (
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 	"github.com/libp2p/go-msgio/protoio"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/stretchr/testify/require"
 )
 
 // these are mock service implementations for testing
-func makeAutoNATServicePrivate(ctx context.Context, t *testing.T) host.Host {
+func makeAutoNATServicePrivate(t *testing.T) host.Host {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
 	return h
 }
 
-func makeAutoNATServicePublic(ctx context.Context, t *testing.T) host.Host {
+func makeAutoNATServicePublic(t *testing.T) host.Host {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.SetStreamHandler(AutoNATProto, sayAutoNATPublic)
 	return h
@@ -51,7 +52,7 @@ func sayAutoNATPublic(s network.Stream) {
 	w.WriteMsg(&res)
 }
 
-func makeAutoNAT(ctx context.Context, t *testing.T, ash host.Host) (host.Host, AutoNAT) {
+func makeAutoNAT(t *testing.T, ash host.Host) (host.Host, AutoNAT) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	h.Peerstore().AddAddrs(ash.ID(), ash.Addrs(), time.Minute)
 	h.Peerstore().AddProtocols(ash.ID(), AutoNATProto)
@@ -90,12 +91,9 @@ func expectEvent(t *testing.T, s event.Subscription, expected network.Reachabili
 
 // tests
 func TestAutoNATPrivate(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	hs := makeAutoNATServicePrivate(ctx, t)
+	hs := makeAutoNATServicePrivate(t)
 	defer hs.Close()
-	hc, an := makeAutoNAT(ctx, t, hs)
+	hc, an := makeAutoNAT(t, hs)
 	defer hc.Close()
 	defer an.Close()
 
@@ -111,23 +109,19 @@ func TestAutoNATPrivate(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(2 * time.Second)
-
-	status = an.Status()
-	if status != network.ReachabilityPrivate {
-		t.Fatalf("unexpected NAT status: %d", status)
-	}
-
+	require.Eventually(t,
+		func() bool { return an.Status() == network.ReachabilityPrivate },
+		2*time.Second,
+		25*time.Millisecond,
+		"expected NAT status to be private",
+	)
 	expectEvent(t, s, network.ReachabilityPrivate)
 }
 
 func TestAutoNATPublic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	hs := makeAutoNATServicePublic(ctx, t)
+	hs := makeAutoNATServicePublic(t)
 	defer hs.Close()
-	hc, an := makeAutoNAT(ctx, t, hs)
+	hc, an := makeAutoNAT(t, hs)
 	defer hc.Close()
 	defer an.Close()
 
@@ -143,23 +137,20 @@ func TestAutoNATPublic(t *testing.T) {
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(1500 * time.Millisecond)
-
-	status = an.Status()
-	if status != network.ReachabilityPublic {
-		t.Fatalf("unexpected NAT status: %d", status)
-	}
+	require.Eventually(t,
+		func() bool { return an.Status() == network.ReachabilityPublic },
+		2*time.Second,
+		25*time.Millisecond,
+		"expected NAT status to be public",
+	)
 
 	expectEvent(t, s, network.ReachabilityPublic)
 }
 
 func TestAutoNATPublictoPrivate(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	hs := makeAutoNATServicePublic(ctx, t)
+	hs := makeAutoNATServicePublic(t)
 	defer hs.Close()
-	hc, an := makeAutoNAT(ctx, t, hs)
+	hc, an := makeAutoNAT(t, hs)
 	defer hc.Close()
 	defer an.Close()
 
@@ -169,43 +160,37 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 		t.Fatalf("failed to subscribe to event EvtLocalRoutabilityPublic, err=%s", err)
 	}
 
-	status := an.Status()
-	if status != network.ReachabilityUnknown {
+	if status := an.Status(); status != network.ReachabilityUnknown {
 		t.Fatalf("unexpected NAT status: %d", status)
 	}
 
 	connect(t, hs, hc)
-	time.Sleep(1500 * time.Millisecond)
-
-	status = an.Status()
-	if status != network.ReachabilityPublic {
-		t.Fatalf("unexpected NAT status: %d", status)
-	}
-
+	require.Eventually(t,
+		func() bool { return an.Status() == network.ReachabilityPublic },
+		2*time.Second,
+		25*time.Millisecond,
+		"expected NAT status to be public",
+	)
 	expectEvent(t, s, network.ReachabilityPublic)
 
 	hs.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
-	hps := makeAutoNATServicePrivate(ctx, t)
+	hps := makeAutoNATServicePrivate(t)
 	connect(t, hps, hc)
 	identifyAsServer(hps, hc)
 
-	time.Sleep(2 * time.Second)
-
+	require.Eventually(t,
+		func() bool { return an.Status() == network.ReachabilityPrivate },
+		2*time.Second,
+		25*time.Millisecond,
+		"expected NAT status to be private",
+	)
 	expectEvent(t, s, network.ReachabilityPrivate)
-
-	status = an.Status()
-	if status != network.ReachabilityPrivate {
-		t.Fatalf("unexpected NAT status: %d", status)
-	}
 }
 
 func TestAutoNATIncomingEvents(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	hs := makeAutoNATServicePrivate(ctx, t)
+	hs := makeAutoNATServicePrivate(t)
 	defer hs.Close()
-	hc, ani := makeAutoNAT(ctx, t, hs)
+	hc, ani := makeAutoNAT(t, hs)
 	defer hc.Close()
 	defer ani.Close()
 	an := ani.(*AmbientAutoNAT)
@@ -227,12 +212,9 @@ func TestAutoNATIncomingEvents(t *testing.T) {
 }
 
 func TestAutoNATObservationRecording(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	hs := makeAutoNATServicePublic(ctx, t)
+	hs := makeAutoNATServicePublic(t)
 	defer hs.Close()
-	hc, ani := makeAutoNAT(ctx, t, hs)
+	hc, ani := makeAutoNAT(t, hs)
 	defer hc.Close()
 	defer ani.Close()
 	an := ani.(*AmbientAutoNAT)
@@ -252,7 +234,7 @@ func TestAutoNATObservationRecording(t *testing.T) {
 	case <-s.Out():
 		t.Fatal("not expecting a public reachability event")
 	default:
-		//expected
+		// expected
 	}
 
 	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/udp/1234")

@@ -14,7 +14,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-func makeAutoNATConfig(ctx context.Context, t *testing.T) *config {
+func makeAutoNATConfig(t *testing.T) *config {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	c := config{host: h, dialer: dh.Network()}
@@ -34,7 +34,7 @@ func makeAutoNATService(t *testing.T, c *config) *autoNATService {
 	return as
 }
 
-func makeAutoNATClient(ctx context.Context, t *testing.T) (host.Host, Client) {
+func makeAutoNATClient(t *testing.T) (host.Host, Client) {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	cli := NewAutoNATClient(h, nil)
 	return h, cli
@@ -45,14 +45,14 @@ func TestAutoNATServiceDialError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c := makeAutoNATConfig(ctx, t)
+	c := makeAutoNATConfig(t)
 	defer c.host.Close()
 	defer c.dialer.Close()
 
 	c.dialTimeout = 1 * time.Second
 	c.dialPolicy.allowSelfDials = false
 	_ = makeAutoNATService(t, c)
-	hc, ac := makeAutoNATClient(ctx, t)
+	hc, ac := makeAutoNATClient(t)
 	defer hc.Close()
 	connect(t, c.host, hc)
 
@@ -70,13 +70,13 @@ func TestAutoNATServiceDialSuccess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c := makeAutoNATConfig(ctx, t)
+	c := makeAutoNATConfig(t)
 	defer c.host.Close()
 	defer c.dialer.Close()
 
 	_ = makeAutoNATService(t, c)
 
-	hc, ac := makeAutoNATClient(ctx, t)
+	hc, ac := makeAutoNATClient(t)
 	defer hc.Close()
 	connect(t, c.host, hc)
 
@@ -90,17 +90,17 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c := makeAutoNATConfig(ctx, t)
+	c := makeAutoNATConfig(t)
 	defer c.host.Close()
 	defer c.dialer.Close()
 
-	c.dialTimeout = 1 * time.Second
-	c.throttleResetPeriod = time.Second
+	c.dialTimeout = 200 * time.Millisecond
+	c.throttleResetPeriod = 200 * time.Millisecond
 	c.throttleResetJitter = 0
 	c.throttlePeerMax = 1
 	_ = makeAutoNATService(t, c)
 
-	hc, ac := makeAutoNATClient(ctx, t)
+	hc, ac := makeAutoNATClient(t)
 	defer hc.Close()
 	connect(t, c.host, hc)
 
@@ -118,7 +118,7 @@ func TestAutoNATServiceDialRateLimiter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(400 * time.Millisecond)
 
 	_, err = ac.DialBack(ctx, c.host.ID())
 	if err != nil {
@@ -130,7 +130,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	c := makeAutoNATConfig(ctx, t)
+	c := makeAutoNATConfig(t)
 	defer c.host.Close()
 	defer c.dialer.Close()
 
@@ -144,7 +144,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 	hs := c.host
 
 	for i := 0; i < 5; i++ {
-		hc, ac := makeAutoNATClient(ctx, t)
+		hc, ac := makeAutoNATClient(t)
 		connect(t, hs, hc)
 
 		_, err := ac.DialBack(ctx, hs.ID())
@@ -153,7 +153,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 		}
 	}
 
-	hc, ac := makeAutoNATClient(ctx, t)
+	hc, ac := makeAutoNATClient(t)
 	defer hc.Close()
 	connect(t, hs, hc)
 	_, err := ac.DialBack(ctx, hs.ID())
@@ -167,9 +167,7 @@ func TestAutoNATServiceGlobalLimiter(t *testing.T) {
 }
 
 func TestAutoNATServiceRateLimitJitter(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	c := makeAutoNATConfig(ctx, t)
+	c := makeAutoNATConfig(t)
 	defer c.host.Close()
 	defer c.dialer.Close()
 
@@ -187,14 +185,9 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	if svc.globalReqs != 0 {
 		t.Fatal("reset of rate limitter occured slower than expected")
 	}
-
-	cancel()
 }
 
 func TestAutoNATServiceStartup(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
 	defer h.Close()
 	dh := bhost.NewBlankHost(swarmt.GenSwarm(t))
@@ -205,10 +198,10 @@ func TestAutoNATServiceStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hc, ac := makeAutoNATClient(ctx, t)
+	hc, ac := makeAutoNATClient(t)
 	connect(t, h, hc)
 
-	_, err = ac.DialBack(ctx, h.ID())
+	_, err = ac.DialBack(context.Background(), h.ID())
 	if err != nil {
 		t.Fatal("autonat service be active in unknown mode.")
 	}
@@ -220,7 +213,7 @@ func TestAutoNATServiceStartup(t *testing.T) {
 
 	<-sub.Out()
 
-	_, err = ac.DialBack(ctx, h.ID())
+	_, err = ac.DialBack(context.Background(), h.ID())
 	if err != nil {
 		t.Fatalf("autonat should be active, was %v", err)
 	}
