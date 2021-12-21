@@ -22,34 +22,44 @@ import (
 // these are mock service implementations for testing
 func makeAutoNATServicePrivate(t *testing.T) host.Host {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	h.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
+	h.SetStreamHandler(AutoNATProto, sayPrivateStreamHandler(t))
 	return h
+}
+
+func sayPrivateStreamHandler(t *testing.T) network.StreamHandler {
+	return func(s network.Stream) {
+		defer s.Close()
+		r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
+		if err := r.ReadMsg(&pb.Message{}); err != nil {
+			t.Error(err)
+			return
+		}
+		w := protoio.NewDelimitedWriter(s)
+		res := pb.Message{
+			Type:         pb.Message_DIAL_RESPONSE.Enum(),
+			DialResponse: newDialResponseError(pb.Message_E_DIAL_ERROR, "no dialable addresses"),
+		}
+		w.WriteMsg(&res)
+	}
 }
 
 func makeAutoNATServicePublic(t *testing.T) host.Host {
 	h := bhost.NewBlankHost(swarmt.GenSwarm(t))
-	h.SetStreamHandler(AutoNATProto, sayAutoNATPublic)
+	h.SetStreamHandler(AutoNATProto, func(s network.Stream) {
+		defer s.Close()
+		r := protoio.NewDelimitedReader(s, network.MessageSizeMax)
+		if err := r.ReadMsg(&pb.Message{}); err != nil {
+			t.Error(err)
+			return
+		}
+		w := protoio.NewDelimitedWriter(s)
+		res := pb.Message{
+			Type:         pb.Message_DIAL_RESPONSE.Enum(),
+			DialResponse: newDialResponseOK(s.Conn().RemoteMultiaddr()),
+		}
+		w.WriteMsg(&res)
+	})
 	return h
-}
-
-func sayAutoNATPrivate(s network.Stream) {
-	defer s.Close()
-	w := protoio.NewDelimitedWriter(s)
-	res := pb.Message{
-		Type:         pb.Message_DIAL_RESPONSE.Enum(),
-		DialResponse: newDialResponseError(pb.Message_E_DIAL_ERROR, "no dialable addresses"),
-	}
-	w.WriteMsg(&res)
-}
-
-func sayAutoNATPublic(s network.Stream) {
-	defer s.Close()
-	w := protoio.NewDelimitedWriter(s)
-	res := pb.Message{
-		Type:         pb.Message_DIAL_RESPONSE.Enum(),
-		DialResponse: newDialResponseOK(s.Conn().RemoteMultiaddr()),
-	}
-	w.WriteMsg(&res)
 }
 
 func makeAutoNAT(t *testing.T, ash host.Host) (host.Host, AutoNAT) {
@@ -173,7 +183,7 @@ func TestAutoNATPublictoPrivate(t *testing.T) {
 	)
 	expectEvent(t, s, network.ReachabilityPublic)
 
-	hs.SetStreamHandler(AutoNATProto, sayAutoNATPrivate)
+	hs.SetStreamHandler(AutoNATProto, sayPrivateStreamHandler(t))
 	hps := makeAutoNATServicePrivate(t)
 	connect(t, hps, hc)
 	identifyAsServer(hps, hc)
