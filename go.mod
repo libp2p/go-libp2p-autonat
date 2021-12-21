@@ -12,4 +12,5 @@ require (
 	github.com/libp2p/go-libp2p-swarm v0.8.0
 	github.com/libp2p/go-msgio v0.0.6
 	github.com/multiformats/go-multiaddr v0.4.0
+	github.com/stretchr/testify v1.7.0
 )
