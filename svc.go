@@ -3,6 +3,7 @@ package autonat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -252,7 +253,10 @@ func (as *autoNATService) background(ctx context.Context) {
 			as.globalReqs = 0
 			as.mx.Unlock()
 			jitter := rand.Float32() * float32(as.config.throttleResetJitter)
-			timer.Reset(as.config.throttleResetPeriod + time.Duration(int64(jitter)))
+			fmt.Println("jitter:", jitter)
+			reset := as.config.throttleResetPeriod + time.Duration(int64(jitter))
+			fmt.Println("reset:", reset)
+			timer.Reset(reset)
 		case <-ctx.Done():
 			as.config.host.RemoveStreamHandler(AutoNATProto)
 			return
