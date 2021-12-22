@@ -215,10 +215,9 @@ func TestAutoNATIncomingEvents(t *testing.T) {
 	em, _ := hc.EventBus().Emitter(&event.EvtPeerIdentificationCompleted{})
 	em.Emit(event.EvtPeerIdentificationCompleted{Peer: hs.ID()})
 
-	time.Sleep(10 * time.Millisecond)
-	if an.Status() == network.ReachabilityUnknown {
-		t.Fatalf("Expected probe due to identification of autonat service")
-	}
+	require.Eventually(t, func() bool {
+		return an.Status() != network.ReachabilityUnknown
+	}, 500*time.Millisecond, 10*time.Millisecond, "Expected probe due to identification of autonat service")
 }
 
 func TestAutoNATObservationRecording(t *testing.T) {
