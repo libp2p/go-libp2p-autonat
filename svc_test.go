@@ -2,16 +2,19 @@ package autonat
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
-	bhost "github.com/libp2p/go-libp2p-blankhost"
 	"github.com/libp2p/go-libp2p-core/event"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
+
+	bhost "github.com/libp2p/go-libp2p-blankhost"
 	swarmt "github.com/libp2p/go-libp2p-swarm/testing"
 
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/stretchr/testify/require"
 )
 
 func makeAutoNATConfig(t *testing.T) *config {
@@ -171,20 +174,24 @@ func TestAutoNATServiceRateLimitJitter(t *testing.T) {
 	defer c.host.Close()
 	defer c.dialer.Close()
 
-	c.throttleResetPeriod = 100 * time.Millisecond
-	c.throttleResetJitter = 100 * time.Millisecond
+	dur := 100 * time.Millisecond
+	if os.Getenv("CI") != "" {
+		dur = 200 * time.Millisecond
+	}
+
+	c.throttleResetPeriod = dur
+	c.throttleResetJitter = dur
 	c.throttleGlobalMax = 1
 	svc := makeAutoNATService(t, c)
 	svc.mx.Lock()
 	svc.globalReqs = 1
 	svc.mx.Unlock()
-	time.Sleep(200 * time.Millisecond)
 
-	svc.mx.Lock()
-	defer svc.mx.Unlock()
-	if svc.globalReqs != 0 {
-		t.Fatal("reset of rate limitter occured slower than expected")
-	}
+	require.Eventually(t, func() bool {
+		svc.mx.Lock()
+		defer svc.mx.Unlock()
+		return svc.globalReqs == 0
+	}, dur*5/2, 10*time.Millisecond, "reset of rate limitter occured slower than expected")
 }
 
 func TestAutoNATServiceStartup(t *testing.T) {
